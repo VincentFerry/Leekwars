@@ -1,0 +1,134 @@
+include('Weapon');
+include('Chip');
+class Cache {
+	static Map<integer, Chip|Weapon> items = [:];
+	static Map<integer, Leek> leeks = [:];
+	static Array effectBoost;
+	static Array chipsDamage;
+	static Array chipsShield;
+	static Array chipsBoost;
+	static Array chipsHeal;
+	static Array chipsSummon;
+	
+	public static initCache() {
+		Cache.getEffectsBoost();
+		Cache.getChipsDamgae();
+		Cache.getChipsShield();
+		Cache.getChipsHeal();
+		Cache.getChipsBoost();
+		Cache.getChipsSummon();
+		debug(Cache.chipsSummon);pause();
+		Cache.getItems();
+	}
+	public static updateCache() {
+		Cache.getLeeks();
+	}
+	static getItems() {
+		Operations.startOp();
+		for (integer itemId in getAllChips()) {
+			Chip item = new Chip(itemId);
+			Cache.items[itemId] = item;
+		}
+		for (integer itemId in getAllWeapons()) {
+			Weapon item = new Weapon(itemId);
+			Cache.items[itemId] = item;
+		}
+		Operations.stopOp('Cache : setItem');
+	}
+	static getLeeks() {
+		Operations.startOp();
+		for (integer leekId in arrayConcat(getAliveAllies(),getAliveEnemies())) {
+			Leek leek = new Leek(leekId);
+			Cache.leeks[leekId] = leek;
+		}
+		Operations.stopOp('Cache : setLeeks');
+	}	
+	static Array<integer> getChipsDamgae() {
+		Array res = [];
+		for (var chip in getAllChips()) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_DAMAGE || effect[0] == EFFECT_POISON) {
+					push(res, chip);
+				}
+			}
+		}
+		Cache.chipsDamage = res;
+	}
+	static Array<integer> getChipsShield() {
+		var res = [];
+		var chips = getAllChips();
+		for (integer chip in chips) {
+			Array effects = getChipEffects(chip);
+			for (Array effect in effects) {
+				// effect raw to add when needed
+				if (effect[0] == EFFECT_ABSOLUTE_SHIELD || effect[0] == EFFECT_RELATIVE_SHIELD) {
+					push(res, chip);
+				}
+			}
+		}
+		Cache.chipsShield = res;
+	}
+	static Array<integer> getChipsBoost() {
+		var res = [];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (inArray(Cache.effectBoost, effect[0])) {
+					push(res, chip);
+				}
+			}
+		}
+		Cache.chipsBoost = res;
+	}
+	static Array<integer> getChipsHeal() {
+		var res = [];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_HEAL || effect[0] == EFFECT_BOOST_MAX_LIFE) {
+					push(res, chip);
+				}
+			}
+		}
+		Cache.chipsHeal = res;
+	}
+	static Array<integer> getChipsSummon() {
+		var res = [];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_SUMMON) {
+					push(res, chip);
+				}
+			}
+		}
+		Cache.chipsSummon = res;
+	}
+	static Array<integer> getEffectsBoost() {
+		Cache.effectBoost = [EFFECT_RAW_BUFF_AGILITY,
+			EFFECT_RAW_BUFF_MAGIC,
+			EFFECT_RAW_BUFF_MP,
+			EFFECT_RAW_BUFF_RESISTANCE,
+			EFFECT_RAW_BUFF_SCIENCE,
+			EFFECT_RAW_BUFF_STRENGTH,
+			EFFECT_RAW_BUFF_TP,
+			EFFECT_RAW_BUFF_WISDOM,
+			EFFECT_RAW_BUFF_AGILITY,
+			// meme nombre raw que sans raw sinon il va en manquer
+			EFFECT_BUFF_AGILITY,
+			//EFFECT_BUFF_MAGIC,
+			EFFECT_BUFF_MP,
+			EFFECT_BUFF_RESISTANCE,
+			//EFFECT_BUFF_SCIENCE,
+			EFFECT_BUFF_STRENGTH,
+			EFFECT_BUFF_TP,
+			EFFECT_BUFF_WISDOM,
+			EFFECT_BUFF_AGILITY,
+			EFFECT_AFTEREFFECT,
+		];
+	}
+}

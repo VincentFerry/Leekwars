@@ -1,0 +1,25 @@
+class Weapon extends Item {
+	constructor(integer id) {
+		this.id = id
+    	this.name = getWeaponName(id);
+    	this.launchType = getWeaponLaunchType(id);
+		this.area = getWeaponArea(id);
+		this.cost = getWeaponCost(id);
+		this.effects = getWeaponEffects(id);
+		this.maxRange = getWeaponMaxRange(id);
+		this.minRange = getWeaponMinRange(id);
+		this.cooldown = 0;
+		this.needLos = weaponNeedLos(id);
+		this.launchType = getWeaponLaunchType(id);
+		this.is_weapon = true;
+		super.getMainTarget();
+		super.getDamagePerTp();
+	}
+	getItemEffectiveArea(Weapon weapon, integer cell, integer cellEnemy) {
+		return getWeaponEffectiveArea(weapon.id, cellEnemy, cell);
+	}
+	static boolean needSetWeapon(Leek leek, Weapon|null weapon) {
+		if(weapon == null) return true; // have to fix this
+		return leek.weapon == weapon.id;
+	}
+}

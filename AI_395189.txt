@@ -1,0 +1,202 @@
+class Carte {
+	static integer caracDanger = 10;
+	static integer safeMapDistance = 34; // WEAPON_BAZOOKA 24 distance + 10pm
+	static integer nbItems = 5;
+	static Map<integer, integer> getCellulesAccessibles(integer cellIni, integer mp) {
+	   integer x ;
+	   integer y ;
+	   Map<integer, integer> res = new Map() as Map<integer, integer>;
+	   Map<integer, integer> res2 = new Map() as Map<integer, integer>;
+	   integer cpt = 0;
+	   Map<integer, integer> temp = new Map() as Map<integer, integer>;
+	   Map<integer, integer> temp2 = new Map() as Map<integer, integer>;
+	   integer|null cellToTest;
+	   res[cellIni] = 0;
+	   while(cpt!=mp){
+		   if (cpt==0) {
+				temp[cellIni]=0;
+		   } else {
+			temp = temp2;
+			temp2 = new Map() as Map<integer, integer>;
+		   }
+		for (var key : var ele in temp) {
+			x = getCellX(key);
+			y = getCellY(key);
+			cellToTest=getCellFromXY(x+1,y);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(getCellContent(cellToTest)==CELL_EMPTY){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}
+			}
+			cellToTest=getCellFromXY(x, y+1);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(getCellContent(cellToTest)==CELL_EMPTY){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}     
+			}
+			cellToTest=getCellFromXY(x-1, y);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(getCellContent(cellToTest)==CELL_EMPTY){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}       
+			}
+			cellToTest=getCellFromXY(x, y-1);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(getCellContent(cellToTest)==CELL_EMPTY){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}     
+			}
+		}
+		cpt++;
+	   }
+	   return res;
+	}
+	
+	static Array<integer> getAreaTarget(Item item, Array<integer> leeksId) {
+		Array res = [];
+		if (item.area == AREA_POINT) {
+			for (integer leekId in leeksId) {
+				push(res, getCell(leekId));
+			}
+			return res;
+		}
+		// Toutes les area à traiter
+		// Parcourir aussi les effets de l'item pour retourner uniquement les cases des targets
+		return res;
+	}
+	
+	static Map<integer, real> safeMap(Leek leek) {
+		Operations.startOp();
+		Array<integer> leekIgnores = arrayConcat(getAliveAllies(), getAliveEnemies());
+		Map<integer,real|integer> map = [:];
+		Map<integer,Array> enemies = Carte.getEnemiesForSafeMap(leek);
+		var res = [];
+		var temp = [];
+		for (integer myCell : integer mp in leek.cellAccess) {
+			map[myCell] = 0;
+			for (integer enemy : Array items in enemies) {
+				Leek enemyLeek = Cache.leeks[enemy];
+				for (integer cellEnemy : integer mpEnemy in enemyLeek.cellAccess) {
+					for (integer item in items) {
+						if (!lineOfSight(myCell, cellEnemy) && Cache.items[item].needLos) {
+						continue;
+						}
+						if (getCellDistance(myCell, cellEnemy) > Cache.items[item].maxRange) {
+							continue;
+						}
+						if (getCellDistance(myCell, cellEnemy) < Cache.items[item].minRange) {
+							continue;
+						}
+						if (Cache.items[item].launchType == LAUNCH_TYPE_LINE && !isOnSameLine(myCell, cellEnemy)) {
+							continue;
+						}
+						// manque mes shields et la force de l'enemi ?
+						if (map[myCell] < Cache.items[item].damagePerTp * enemyLeek.tp) {
+							map[myCell] = Cache.items[item].damagePerTp * enemyLeek.tp;
+							/*map[myCell] = Cache.items[item].damagePerTp * enemyLeek.tp * (1 + enemyLeek.strength/100) * ( 1 - leek.relativeShield / 100) - leek.absoluteShield;*/
+						}							
+						//break; // On passe à l'enemy suivant ?
+					}
+				}
+			}
+		}
+		
+		boolean colorMap = true;
+		boolean debugMap = true;
+		if (colorMap) {
+			for (integer cell : integer|real value in map) {
+				if (value == 0) {
+					mark(cell, COLOR_GREEN, 1);
+				} else if (value > 0) {
+					mark(cell, COLOR_RED, 1);
+				}
+				if (debugMap) {
+					markText(cell, round(value), 1);
+				}
+			}
+		}
+		leek.mapDanger = map;
+		Operations.stopOp('Carte : Safe map');
+	}
+	
+	static integer getOneCellMap(Leek leek) {
+		Operations.startOp();
+		Map<integer, integer> map = leek.mapDanger;
+		Array<integer> leeks = arrayConcat(getAliveAllies(), getAliveEnemies());
+		Array<integer> leekIgnores;
+		real minDanger = mapMin(leek.mapDanger);
+		for (integer entity in leeks) {
+			push(leekIgnores, getCell(entity));
+		}
+		integer res;
+		integer dist = 99;
+		integer enemy = Carte.getClosestEnemy(leek);
+		integer cellEnemy = getCell(enemy);
+		for (integer cell : real|integer value in map) {
+			if (minDanger != 0 &&  value == minDanger) {
+				res = cell;break;
+			}
+			integer|null tempDist = getPathLength(cell, cellEnemy, leekIgnores);
+			if (tempDist < dist && value == 0) {
+				res = cell;
+				dist = tempDist;
+			}
+		}
+		mark(res, COLOR_BLUE, 1);
+		Operations.stopOp('Carte : getOneCellSafeMap');
+		return res;
+	}
+	
+	static integer getClosestEnemy(Leek leek) {
+		integer res;
+		integer dist = 9999;
+		Array<integer> enemies = getAliveEnemies();
+		for (var enemy in enemies) {
+			if (!isSummon(enemy)) {
+				var dist_tmp = getCellDistance(getCell(), getCell(enemy));
+				if (dist_tmp < dist) {
+					res = enemy;
+					dist = dist_tmp;
+				}
+			}
+		}
+		return res;
+	}
+	
+	static Map<integer,Array> getEnemiesForSafeMap(Leek leek) {
+		Array enemies = getAliveEnemies();
+		Map<integer,Array> res = [:];
+		Array items = [];
+		for (integer enemy in enemies) {
+			if (getCellDistance(leek.cell, Cache.leeks[enemy].cell) > Carte.safeMapDistance)
+				continue;
+			if (Cache.leeks[enemy].strength < Carte.caracDanger && Cache.leeks[enemy].magic < Carte.caracDanger)
+				continue;
+			if (!isEmpty(getWeapons(enemy))) { // chest case
+				push(items, getWeapons(enemy));	
+			}	
+			for(integer chip in getChips(enemy)) {
+				if (inArray(Cache.chipsDamage, chip)) {
+					push(items, chip);
+				}
+			}
+			items = arrayFlatten(items);
+			items = arraySort(items, function(one, two) {
+				if (Cache.items[one].damagePerTp > Cache.items[two].damagePerTp) {
+					return 1;
+				} else if (Cache.items[one].damagePerTp < Cache.items[two].damagePerTp) {
+					return -1;
+				} else {
+					return 0;
+				}
+			});
+			items = arraySlice(items, 0, Carte.nbItems);
+			res[enemy] = items;
+		}
+		return res;
+	}
+}

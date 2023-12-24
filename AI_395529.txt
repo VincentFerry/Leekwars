@@ -1,0 +1,13 @@
+class Operations {
+	static currentOpe;
+	static boolean debugOpe = true;
+	static startOp(){
+		Operations.currentOpe = getOperations();
+	}
+	static stopOp(string title){
+		integer ops = getOperations()-Operations.currentOpe - 3;
+		if (Operations.debugOpe) {
+			 debug("Operations (" + title + ") : " + ops  + " sur " + getMaxOperations());
+		}
+	}
+}

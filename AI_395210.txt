@@ -1,0 +1,21 @@
+class Chip extends Item {
+	constructor(integer id) {
+		this.id = id
+    	this.name = getChipName(id);
+    	this.launchType = getChipLaunchType(id);
+		this.area = getChipArea(id);
+		this.cost = getChipCost(id);
+		this.effects = getChipEffects(id);
+		this.maxRange = getChipMaxRange(id);
+		this.minRange = getChipMinRange(id);
+		this.cooldown = getChipCooldown(id);
+		this.needLos = chipNeedLos(id);
+		this.launchType = getChipLaunchType(id);
+		this.is_weapon = false;
+		super.getMainTarget();
+		super.getDamagePerTp();
+	}
+	getItemEffectiveArea(Chip chip, integer cell, integer cellEnemy) {
+		return getChipEffectiveArea(chip.id, cellEnemy, cell);
+	}
+}

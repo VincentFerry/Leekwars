@@ -1,0 +1,128 @@
+class Leek {
+    integer id
+    string name
+    integer strength
+    real life
+    integer magic
+    integer resistance
+    integer absoluteShield
+    integer relativeShield
+    integer widsom
+    integer agility
+    integer science
+    integer tp
+    integer mp
+    integer totalLife
+    integer cell
+    Weapon|null weapon
+    damageReturn
+	Array<Action> actions = []
+	Map<integer, integer> cellAccess
+	//integer maxRange
+	real MaxDamagePerTP
+	Map<integer, integer|real> mapDanger;
+	
+    constructor(id) {
+        this.id = id
+        this.name = getName(id)
+		this.strength = getStrength(id); 
+		this.life = getLife(id); 
+		this.magic = getMagic(id); 
+		this.resistance = getResistance(id); 
+		this.absoluteShield = getAbsoluteShield(id); 
+		this.relativeShield = getRelativeShield(id); 
+		this.widsom = getWisdom(id); 
+		this.agility = getAgility(id); 
+		this.science = getScience(id); 
+		this.tp = getTP(id); 
+		this.mp = getMP(id); 
+		this.totalLife = getTotalLife(id); 
+		this.cell = getCell(id);
+		this.weapon = getWeapon(id) ? new Weapon(getWeapon(id)) : null;
+		this.damageReturn = getDamageReturn(id);
+		this.cellAccess = Carte.getCellulesAccessibles(this.cell, this.mp);
+		//this.getMaxRange();
+		this.getMaxDamagePerTP();
+    }
+	
+	Array<Action> getActions() {
+		var items = arrayConcat(getWeapons(this.id), getChips(this.id));
+		Operations.startOp();
+		for (integer itemId in items) {
+			Item item = Cache.items[itemId];
+			Array cellsTarget = [];
+			if (item.mainTarget == 'enemy') {
+				Array targets = getAliveEnemies();
+				cellsTarget = Carte.getAreaTarget(item, targets);
+			} else if (item.mainTarget == 'ally') {
+				Array targets = getAliveAllies();
+				cellsTarget = Carte.getAreaTarget(item, targets);
+			}
+			
+			for (integer cellFrom : integer mp in this.cellAccess) {
+				for (integer cellTo in cellsTarget) {
+					if (!lineOfSight(cellFrom, cellTo) && item.needLos) {
+						continue;
+					}
+					if (getCellDistance(cellFrom, cellTo) > item.maxRange) {
+						continue;
+					}
+					if (getCellDistance(cellFrom, cellTo) < item.minRange) {
+						continue;
+					}
+					if (item.launchType == LAUNCH_TYPE_LINE && !isOnSameLine(cellFrom, cellTo)) {
+						continue;
+					}
+					var action = new Action(this, item, cellFrom, cellTo);
+					if (action.priority > 0) {
+						push(this.actions, action);
+					}
+				}	
+			}
+				/*if (action.priority > 0) {
+					push(this.actions, action);
+				}*/
+		}
+		Operations.stopOp('Leek : getActions');
+	}
+	
+	/*integer getMaxRange() {
+		// can add area of weapon in maxRange if needed
+		for (integer weapon in getWeapons(this.id)) {
+			if (Cache.items[weapon].maxRange > this.maxRange) {
+				this.maxRange = Cache.items[weapon].maxRange;
+			}
+		}
+		for (integer chip in getChips(this.id)) {
+			if (inArray(Cache.chipsDamage, chip)) {
+				if (Cache.items[chip].maxRange > this.maxRange) {
+					this.maxRange = Cache.items[chip].maxRange;
+				}
+			}
+		}
+	}*/
+	
+	// For MapDanger
+	real getMaxDamagePerTP()
+	{
+		Array<integer> items = arrayConcat(Cache.chipsDamage, getWeapons(this.id));
+		real maxDamage = 0;
+		real tempDmg;
+		
+		for (integer item in items) {
+			tempDmg = 0;
+			for (Array effect in Cache.items[item].effects) {
+				if (effect[0] == EFFECT_DAMAGE) {
+					// Formule de base https://leekwars.com/encyclopedia/fr/Force
+					tempDmg = effect[2] * (1 + this.strength / 100); // récupérer mes shields pour un bon calcul
+					tempDmg = tempDmg / Cache.items[item].cost;
+					
+				}
+			}
+			if (tempDmg > maxDamage) {
+				maxDamage = tempDmg;
+			}
+		}
+		this.MaxDamagePerTP = maxDamage;
+	}
+}

@@ -1,0 +1,30 @@
+include('Carte');
+include('Action');
+include('Leek');
+include('Item');
+include('Weapon');
+include('Chip');
+include('Cache');
+include('Combo');
+include('Operations');
+
+if (getTurn() == 1) {
+	Cache.initCache(); // One turn
+}
+var me = new Leek(getEntity());
+Cache.updateCache();
+debug(me);
+Carte.safeMap(me);
+Array<Action> actions = Combo.getBestCombo(me);
+
+for (Action action in actions) {
+	debug(action);
+	setRegister(string(action.priority), action.item.name);
+	Action.useAction(me, action);
+}
+var cell = Carte.getOneCellMap(me);
+moveTowardCell(cell);
+
+if (Operations.debugOpe) {
+	debug("J'ai utilisé " + getOperations() + ' sur ' + getMaxOperations());
+}

@@ -1,0 +1,65 @@
+class Combo{
+	Array<Action> actions = []
+	
+	/**
+	 * brut force
+	 * */
+	static Array<Action> getBestCombo(Leek leek) {
+		leek.getActions();
+		Array actions = leek.actions;
+		actions = Action.sortActions(actions, leek);
+		Array<Action> finalCombos = [];
+		integer cpt = 0;
+		integer tempTp = leek.tp
+		integer tempMp = leek.mp;
+		integer tempCell = leek.cell;
+		boolean tempColdown = false;
+		Weapon|Chip|null tempWeapon = leek.weapon;
+		integer itemCost;
+		Array weaponEffects;
+
+		while (tempTp > 0 && cpt < count(actions)) {
+			if (cpt == 0 || actions[cpt].item != actions[cpt-1].item) {
+				tempColdown = getCooldown(actions[cpt].item.id, leek.id) == 0 ? false : true;
+			}
+			while (Combo.isValideCombo(tempWeapon, actions[cpt], tempTp, tempCell, tempMp, tempColdown)) {
+				push(finalCombos, actions[cpt]);
+				itemCost = actions[cpt].item.cost;
+				if (actions[cpt].item.is_weapon && Weapon.needSetWeapon(leek, actions[cpt].item)) {
+					tempTp -= Weapon.needSetWeapon(leek, actions[cpt].item) ? itemCost + 1 : itemCost;	
+				} else {
+					tempTp -= itemCost;
+				}
+				tempWeapon = actions[cpt].item;
+				tempMp -= getCellDistance(tempCell, actions[cpt].cellFrom);
+				tempCell = actions[cpt].cellFrom;
+				if (actions[cpt].item.cooldown > 0) {
+					tempColdown = true;
+				}
+			}
+			cpt++;
+		}
+		if (!isEmpty(finalCombos)) {
+			/*debug('finalCombos');
+			debug(count(finalCombos));
+			debug(finalCombos); pause();*/
+		}
+		
+		return finalCombos;
+	}
+	
+	static boolean isValideCombo(Weapon|Chip|Item actualWeapon, Action action, integer tp, integer tempCell, integer tempMp, boolean tempColdown) {
+		if (tempColdown != false) {
+			return false;
+		}
+		var weaponCost = (actualWeapon != action.item) ? action.item.cost + 1 : action.item.cost;
+		if (tp < weaponCost) {
+			return false;
+		}
+		var dist = getPathLength(tempCell, action.cellFrom);
+		if ((!dist && (action.cellFrom != tempCell)) || dist > tempMp) {
+			return false;
+		}
+		return true;
+	}
+}

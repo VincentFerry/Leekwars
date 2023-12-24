@@ -1,0 +1,102 @@
+class Action{
+	Leek leek
+	Weapon|Chip|Item item
+	integer cellFrom
+	integer cellTo
+	integer|real priority = 0;
+	
+	constructor(Leek leek, Item item, integer cellFrom, integer cellTo) {
+		this.item = item;
+		this.leek = leek;
+		this.cellFrom = cellFrom;
+		this.cellTo = cellTo;
+		this.getPriority();
+	}
+	/**
+	 *  dégats 10
+	 *  stats ? 
+	 *  tp ? 
+	 * 	Mp ?
+	 * */
+	
+	private getPriority() {
+		this.priority += item.calcPrio(leek, item, cellFrom, cellTo);
+		this.calcPrioDanger();
+	}
+	static Array<Action> sortActions(Array<Action> actions , Leek leek) {
+		Array<Action> res = [];
+		res = arraySort(actions, function(action1, action2) {
+			if (action1.priority > action2.priority) {
+				return -1;
+			} else if (action1.priority == action2.priority) {
+				integer dist1 = getCellDistance(action1.cellFrom, leek.cell);
+				integer dist2 = getCellDistance(action2.cellFrom, leek.cell);
+				if (dist1 < dist2) {
+					return -1;
+				} else if (dist1 == dist2) {
+					return 0;
+				} else {
+					return 1;
+				}
+			} else {
+				return 1;
+			}
+		});
+		return res;
+	}
+	public string() {
+        return "Item : " + this.item.name + ", Leek : " + this.leek.name + ', CellFrom : ' + this.cellFrom + ', CellTo : ' + this.cellTo + ', Priorité : ' + this.priority;
+    }
+	static useAction(Leek leek, Action action) {
+		integer result;
+		Cache.items[action.item.id].is_weapon;
+		if (action.cellFrom != leek.cell) {
+			moveTowardCell(action.cellFrom, leek.mp);
+		}
+		if (Cache.items[action.item.id].is_weapon && leek.weapon != action.item) {
+			setWeapon(action.item.id);
+			leek.weapon = action.item;
+		}
+		if (Cache.items[action.item.id].is_weapon) {
+			result = useWeaponOnCell(action.cellTo);
+		} else {
+			result = useChipOnCell(action.item.id, action.cellTo);
+		}
+
+		if (result <= 0)
+		{
+			debugE("Echec : " + result);
+			debugE("cellFrom : " + action.cellFrom + ', cellTo : ' + action.cellTo + ', item : ' + action.item.name);
+			pause();
+		}
+	}
+	
+	private calcPrioDanger() {
+		if (this.leek.cell == this.cellFrom) return; // case cell from
+		if (this.leek.cellAccess[this.cellFrom] == this.leek.mp) { // case max distance
+			if (this.priority < this.leek.mapDanger[this.cellFrom]) {
+				this.priority -= this.leek.mapDanger[this.cellFrom] * this.leek.tp;
+			}
+			return;
+		}
+		// other
+		integer dist1 = getCellDistance(this.leek.cell, this.cellFrom);
+		integer dist2;
+		real minDanger = this.leek.mapDanger[this.leek.cell];
+		integer cellMinDanger;
+		for(integer cell : integer mp in this.leek.cellAccess) {
+			dist2 = getCellDistance(this.cellFrom, cell);
+			if (dist1 + dist2 > this.leek.mp) continue; // can't access this cell			
+			if (minDanger == 0) return;
+			if (minDanger < this.leek.mapDanger[cell]) {
+				minDanger = this.leek.mapDanger[cell];
+				cellMinDanger = cell;
+			}
+		}
+		
+		// Comparer avec la cellule ou je peux me cacher donc en soustrayant les mp utilisés.
+		if (this.priority < this.leek.mapDanger[cellMinDanger]) {
+			this.priority -= this.leek.mapDanger[cellMinDanger] * this.leek.tp;
+		}
+	}
+}

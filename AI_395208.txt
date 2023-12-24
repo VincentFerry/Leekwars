@@ -1,0 +1,80 @@
+class Item {
+    id
+    name
+    launchType
+	area
+	cost
+	Array effects
+	maxRange
+	minRange
+	cooldown
+	needLos
+	boolean is_weapon
+	string mainTarget
+	real damagePerTp
+	
+	getMainTarget() {
+		if (inArray(Cache.chipsShield, this.id) || inArray(Cache.chipsHeal, this.id) || inArray(Cache.chipsBoost, this.id) ) {
+			this.mainTarget = 'ally';
+			return;
+		} else if (inArray(Cache.chipsDamage, this.id) || this.is_weapon) {
+			this.mainTarget = 'enemy';
+			return;
+		} else if (inArray(Cache.chipsSummon, this.id)) {
+			this.mainTarget = 'none';
+		} else {
+			debugW('not coded : ' + this.name);
+		}
+		/*for (var effect in this.effects) {
+			if (effect[0] == EFFECT_DAMAGE) {
+				this.mainTarget = 'enemy';
+			} else if (inArray(Tools.getChipsShield(), effect[0])) {
+				this.mainTarget = 'ally';
+			} else {
+				debugW('not coded');
+				debug(this.name);
+				pause();
+			}
+			break;
+		}*/
+	}
+	calcPrio(Leek leek, Weapon|Chip item, integer cellFrom, integer cellTo) {
+		real prio = 0;
+		real tmpPrio = 0;
+		real itemPrio = 0.3;
+		Array areaCells = item.getItemEffectiveArea(item, cellFrom, cellTo);
+		for (integer areaCell in areaCells) {
+			integer entity = getEntityOnCell(areaCell);
+			if (entity == -1) {
+				continue;
+			} else {
+				for (var effect in item.effects) {
+					if (effect[0] == EFFECT_DAMAGE) {
+						prio += average([effect[1], effect[2]]) * ( 1 + leek.strength/100) * (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+					} else if (effect[0] == EFFECT_ABSOLUTE_SHIELD) {
+						tmpPrio = ((average([effect[1], effect[2]]) * (1 + leek.resistance / 100)) * effect[3]) * itemPrio;
+						prio += (tmpPrio/item.cost) * leek.tp;
+					} else if(inArray(Cache.effectBoost, effect[0])) {
+						if (effect[0] == EFFECT_RAW_BUFF_TP)
+							itemPrio = 10;
+						prio += ((average([effect[1], effect[2]]) * (1 + leek.science / 100)) * effect[3]) * itemPrio;
+					} else if((effect[0] == EFFECT_HEAL || effect[0] == EFFECT_BOOST_MAX_LIFE) && leek.life != leek.totalLife) {
+						tmpPrio = (average([effect[1], effect[2]]) * (1 + leek.widsom / 100));
+						// do to faire le max healing
+						prio += effect[3] == 0 ? tmpPrio : tmpPrio * effect[3];
+					}
+				}
+			}	
+		}
+		return prio;
+	}
+	getDamagePerTp() {
+		real res = 0;
+		for (Array effect in this.effects) {
+			if (effect[0] != EFFECT_DAMAGE && effect[0] != EFFECT_POISON)
+				continue;
+			res += average([effect[1], effect[2]]) / this.cost;
+		}
+		this.damagePerTp = res;
+	}
+}
