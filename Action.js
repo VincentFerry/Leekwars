@@ -1,0 +1,473 @@
+include('Target');
+include('Scoring');
+class Action{
+	Leek leek
+	Weapon|Chip|Item item
+	integer cellFrom
+	integer cellTo
+	real priority = 0.0;
+	Array<Target> targets = [];
+	integer entityToRes;
+	
+	constructor(Leek leek, Item item, integer cellFrom, integer cellTo) {
+		this.item = item;
+		this.leek = leek;
+		this.cellFrom = cellFrom;
+		this.cellTo = cellTo;
+		this.getPriority();
+	}
+	
+	private getPriority() {
+		this.priority = 0;
+		this.targets = [];
+		if (mapContainsKey(Cache.chipsSummon, this.item.id)) {
+			this.priority = this.calcPrioSummon();
+		} else if(this.item.id == CHIP_RESURRECTION) {
+			this.calcPrioRes();
+		} else  {
+			this.priority = this.calcPrio(leek, item, cellFrom, cellTo);
+		}
+		// turn 1 config depends on meta
+		if (Cache.turn == 1) {
+			if (this.item.id == CHIP_REFLEXES || this.item.id == CHIP_WARM_UP) {
+				this.priority = this.priority * 100;
+			} else if (this.item.id == CHIP_PRISM) {
+				this.priority = this.priority * 75;
+			} else if ((this.item.id == CHIP_KNOWLEDGE || this.item.id == CHIP_SOLIDIFICATION) && this.cellFrom == this.cellTo) {
+				this.priority = this.priority * 50;
+			} else if (this.item.id == CHIP_RAGE) {
+				this.priority = this.priority * 5;
+			}
+		}
+
+		// distance
+		if (Cache.fightType == FIGHT_TYPE_FARMER && this.cellFrom != Cache.leeks[leek.id].cell && Cache.turn < 35) {
+			integer teamDistance = getCellDistance(Carte.calculateTeamCenter('ally'), Carte.calculateTeamCenter('enemy'));
+			if (teamDistance > 5) { // else =  mélée fight
+				integer distAllies = getCellDistance(this.cellFrom, Carte.calculateTeamCenter('ally'));
+				integer distEnemies = getCellDistance(this.cellFrom, Carte.calculateTeamCenter('enemy'));
+				if (distAllies + 3 >= distEnemies) {
+					this.priority = this.priority * 0.1;
+				}
+				
+				/*if (distAllies > 7) {
+					if (this.item.id == CHIP_INVERSION || this.item.id == CHIP_LIBERATION) {
+						this.priority = 0;return;
+					} else {
+						this.priority = (Cache.turn > 3) ? this.priority * 0.1 : this.priority;
+					}
+				} else if (distAllies > 5) {
+					if (this.item.id == CHIP_INVERSION || this.item.id == CHIP_LIBERATION) {
+						this.priority = 0; return;
+					} else {
+						this.priority = (Cache.turn > 3) ? this.priority / 5 : this.priority;
+					}
+				}*/
+			}
+			
+		}
+
+		// jump
+		if (!Cache.noMoreJump && leek.chipsCooldown[CHIP_JUMP] == false && inArray(leek.chips, CHIP_JUMP)) {
+			if (!mapContainsKey(this.leek.cellAccessBase, this.cellFrom)) {
+				if (this.item.id == CHIP_LIBERATION || this.item.id == CHIP_SERUM || this.item.id == CHIP_INVERSION) {
+					this.priority = 0; return;
+				}
+				//this.priority = (this.priority * this.item.cost) / (this.item.cost + Cache.items[CHIP_JUMP].cost);
+			} else if (getCellDistance(this.cellFrom, this.cellTo) > Cache.leeks[this.leek.id].mp) { // le cas des tp reste à gérer
+				this.priority = (this.priority * this.item.cost) / (this.item.cost + Cache.items[CHIP_JUMP].cost);
+				if (this.item.id == CHIP_LIBERATION || this.item.id == CHIP_SERUM || this.item.id == CHIP_INVERSION) {
+					this.priority = 0;return;
+				}
+				//this.priority = (this.priority * this.item.cost) / (this.item.cost + Cache.items[CHIP_JUMP].cost);
+			}
+		}
+	}
+	public string() {
+        return "Item : " + this.item.name + ", Leek : " + this.leek.getName() + ', CellFrom : ' + this.cellFrom + ', CellTo : ' + this.cellTo + ', Priorité : ' + this.priority + ', Targets : ' + this.targets;
+    }
+	static useAction(integer leekId, Action action) {
+		integer myCell = getCell();
+		integer mp = getMP();
+		Leek leek = Cache.leeks[leekId];
+		integer? result;
+		
+		if (action.cellFrom != action.cellTo) {
+			if (!action.item.isEntityInArea(action.cellFrom, action.cellTo) && action.item.id != CHIP_GRAPPLE && action.item.id != CHIP_BOXING_GLOVE && action.item.id != CHIP_RESURRECTION && action.item.id != CHIP_JUMP && !mapContainsKey(Cache.chipsSummon, action.item.id)) {
+			// debug should be usefull to calcul this cases later
+			//debugW('Aucune entité ici : ' + action);
+			return;
+		}
+			// Move
+			if (!Cache.forceNoMove && myCell != action.cellFrom) {
+				if (action.item.cost + Cache.items[CHIP_JUMP].cost > getTP()) return;
+				integer? pathL = getPathLength(myCell, action.cellFrom);
+				if ((!pathL || pathL > mp)) {
+					Map area3 = Cache.areaCell3[action.cellFrom];
+					integer lowDist = 99;
+					integer? resCell;
+					for (integer cell : integer dist in area3) {
+						if (!isEmptyCell(cell)) continue;
+						integer? tmpDist = getPathLength(cell, myCell, [myCell]);
+						if (tmpDist && tmpDist < lowDist && tmpDist <= mp) {
+							lowDist = tmpDist;
+							resCell = cell;
+						}
+					}
+					if (action.item.cost + Cache.items[CHIP_JUMP].cost > getTP()) return;
+					if (resCell) {
+						moveTowardCell(resCell, mp);
+						useChipOnCell(CHIP_JUMP, action.cellFrom);
+					}
+				} else {
+					moveTowardCell(action.cellFrom, mp);
+				}
+			}
+			// Set Weapon 
+			if (action.item.is_weapon && getWeapon() != action.item.id) {
+				setWeapon(action.item.id);
+				leek.weapon = action.item;
+			}
+
+			// Use item
+			if (Cache.items[action.item.id].is_weapon) {
+				result = useWeaponOnCell(action.cellTo);
+			} else if (action.item.id == CHIP_RESURRECTION) {
+				result = resurrect(action.entityToRes, action.cellTo);
+			} else if(mapContainsKey(Cache.chipsSummon, action.item.id)) {
+				result = summon(action.item.id, action.cellTo, main);
+				if (result < 1) {
+					result = summon(action.item.id, getCellToUseChip(action.item.id, getEntity()), main);
+				}
+			} else {
+				result = useChipOnCell(action.item.id, action.cellTo);
+			}
+
+			// bad hotfix to fix
+			/* should not happend because jump should be an action */
+			if (result == USE_INVALID_POSITION) {
+				/*debugE(action);
+				debugE(getCell());pause();*/
+				/*useChipOnCell(CHIP_JUMP, action.cellFrom);
+				if (Cache.items[action.item.id].is_weapon) {
+					result = useWeaponOnCell(action.cellTo);
+				} else {
+					result = useChipOnCell(action.item.id, action.cellTo);
+				}*/
+			}
+		} else { // autre hotfix dégeu
+			if (action.item.area != AREA_POINT) {
+				if (!Cache.forceNoMove) moveTowardCell(action.cellFrom, getMP());
+			}
+			result = useChipOnCell(action.item.id, getCell());
+			/*if (result == USE_INVALID_POSITION) {
+				useChipOnCell(CHIP_JUMP, action.cellFrom);
+				if (Cache.items[action.item.id].is_weapon) {
+					result = useWeaponOnCell(action.cellTo);
+				} else {
+					result = useChipOnCell(action.item.id, action.cellTo);
+				}
+			}*/
+		}
+		
+		if (result <= 0)
+		{
+			if (result == USE_NOT_ENOUGH_TP && getCooldown(CHIP_ADRENALINE) == 0 && inArray(Cache.leeks[leekId].chips, CHIP_ADRENALINE)) {
+				debugW('force adrealine');
+				useChip(CHIP_ADRENALINE);
+				if (Cache.items[action.item.id].is_weapon) {
+					result = useWeaponOnCell(action.cellTo);
+				} else {
+					if (action.cellFrom == action.cellTo) {
+						result = useChip(action.item.id);
+					} else {
+						result = useChipOnCell(action.item.id, action.cellTo);
+					}
+				}
+			}
+			if (result <= 0) {
+				debugE("Echec : " + result);
+				debugE("cellFrom : " + action.cellFrom + ', cellTo : ' + action.cellTo + ', item : ' + action.item.name);
+				if (action.item.id == CHIP_RESURRECTION) {
+					debugE('entity to res : ' + action.entityToRes);
+				}
+				/* @todo IMPORTANT
+				 Les bugs te tp sont dû à rage quand on est déjà booster, on enlève pas la valeur d'avant
+				 généralier pour dôme et tous les chips qu'on reboost.
+				 */
+			}
+		}
+	}
+	
+	private integer calcPrio(Leek leek, Weapon|Chip item, integer cellFrom, integer cellTo) {
+		/* mettre la prioriété par target ! Simplifie le debug et une gestion plus fine des prio ! */
+		real prio = 0;
+		integer baseEntity;
+		integer entity;
+		Object tmpObj;
+		Array<integer> areaCells = item.getItemEffectiveArea(cellFrom, cellTo);
+		
+		integer plasmaMultiplicator = 0;
+		if (item.id == CHIP_PLASMA) {
+			for (integer cell in areaCells) {
+				if (Carte.getEntityOnCell(cell) != -1) {
+					plasmaMultiplicator++;
+				}
+			}
+			if (plasmaMultiplicator < 3) return 0;
+			Cache.items[CHIP_PLASMA].effects = getChipEffects(CHIP_PLASMA);
+			Cache.items[CHIP_PLASMA].effects[0][1] = Cache.items[CHIP_PLASMA].effects[0][1] * plasmaMultiplicator;
+			Cache.items[CHIP_PLASMA].effects[0][2] = Cache.items[CHIP_PLASMA].effects[0][2] * plasmaMultiplicator;
+		} /*else if (item.id == CHIP_COVETOUSNESS) {
+			if (cellFrom == cellTo) return 0; // fix dégeux 
+			integer cptEnemies = 0;
+			integer entity;
+			for (var areaCell in areaCells) {
+				entity = getEntityOnCell(areaCell);
+				if (entity != -1) {
+					if (!Cache.leeks[entity].ally && Cache.leeks[entity].life > 0) {
+						cptEnemies++;
+						if (cptEnemies == 2) break;
+					}
+				}
+			}
+			if (cptEnemies >= 2) {
+				push(this.targets, new Target(leek.id, EFFECT_RAW_BUFF_TP, cptEnemies));
+				return 30;
+			} else { 
+				return 0;
+			}
+		}*/
+		
+		for (integer areaCell in areaCells) {
+			real areaMulti = Carte.areaMultiplicator[getCellDistance(areaCell, cellTo)];
+
+			baseEntity = getEntityOnCell(areaCell); // marche pas, je vois pas pk j'ai écris ça
+			if (areaCell == leek.cell && this.cellFrom != leek.cell) baseEntity = -1; // delete last placment
+			if (baseEntity == leek.id && this.cellTo != Cache.leeks[leek.id].cell) baseEntity = -1;
+			if (cellFrom == areaCell) baseEntity = leek.id; // premove Deplacment;
+			
+			if (baseEntity == -1) {
+				continue;
+			} else if (Action.isAlreadyBuff(baseEntity, item.id)) {
+				continue;
+			} else {
+				real entityPrio = Cache.leeks[baseEntity].type == ENTITY_BULB ? 0.5 : 1;
+				if (Cache.enemiesPrio[baseEntity] && Cache.enemiesPrio[baseEntity] != 1) {
+					entityPrio += Cache.enemiesPrio[baseEntity];
+				}
+				for (Array effect in item.effects) {
+					if (effect[5] & EFFECT_MODIFIER_ON_CASTER) {
+						entity = leek.id;
+					} else {
+						entity = baseEntity;
+					}
+					if (mapContainsKey(Scoring.Effects, effect[0])) { // Main Scoring
+					if (item.id == CHIP_BOXING_GLOVE || item.id == CHIP_GRAPPLE) continue; // osef du boost en vrai
+						tmpObj = Scoring.Effects[effect[0]].call(effect, entity, leek, entityPrio, areaMulti, item);
+						Target target = new Target(entity, effect[0],  tmpObj.value)
+						target.addPriority(tmpObj.prio);
+						push(this.targets, target);
+						prio += tmpObj.prio;
+					} else if (mapContainsKey(Scoring.Placment, effect[0])) { // Placment Scoring
+						var entityPlacment = Carte.getFirstEntityOnLine(this.cellFrom, this.cellTo, item);
+						if (!entityPlacment || entityPlacment == -1) continue;
+						tmpObj = Scoring.Placment[effect[0]].call2(effect, this.cellFrom, this.cellTo, entityPlacment);
+						Target target = new Target(entityPlacment, effect[0],  tmpObj.value);
+						target.addPriority(tmpObj.prio);
+						push(this.targets, target);
+						prio += tmpObj.prio;
+					} else {
+						debugW('effect not coded : ' + effect[0] + ' dans l item : ' + this.item.name);
+					}
+				}
+			}	
+		}
+		return prio;
+	}
+	
+	/** A stocker en cache par tour pour les 2 équipes */
+	static Array<integer> getEnemiesTarget(integer leekId) {
+		if (Cache.enemiesTargets) return Cache.enemiesTargets;
+		Leek leek = Cache.leeks[leekId];
+		Array<integer> alivesEnemies = getAliveEnemies();
+		Array<integer> alivesAllies = [];
+		integer cptLeekAllies = 0;
+		for (Leek entity in Cache.leeks) {
+			if (entity.life > 0 && entity.type == ENTITY_LEEK && entity.ally && !entity.invulne) {
+				push(alivesAllies, entity.id);
+				cptLeekAllies++;
+			}
+		}
+		
+		if (!leek.ally) return alivesAllies;
+		
+		boolean chestAlive = false;
+		integer cptLeekEnemies = 0;
+		Array<integer> chestEnemies = [];
+		for (integer enemy in alivesEnemies) {
+			if (Cache.leeks[enemy].type == ENTITY_CHEST) {
+				chestAlive = true;
+				push(chestEnemies, enemy);
+			}
+			if (Cache.leeks[enemy].type == ENTITY_LEEK) {
+				cptLeekEnemies++
+			}
+		}
+		
+		alivesEnemies = arrayFilter(alivesEnemies, function(a) {
+			return !Cache.leeks[a].invulne;
+		});
+		
+		if (chestAlive && cptLeekEnemies == 1 && cptLeekAllies >= 3) {
+			return chestEnemies;
+		}
+		if (Cache.fightType == FIGHT_TYPE_BATTLE_ROYALE && count(alivesEnemies) > 4) {
+			Array<Leek> enemiesLeek = []; 
+			for (integer enemy in alivesEnemies) {
+				push(enemiesLeek, Cache.leeks[enemy]);
+			}
+			enemiesLeek = arraySort(enemiesLeek, function(a, b) {
+				integer distA = getCellDistance(a.cell, leek.cell);
+				integer distB = getCellDistance(b.cell, leek.cell);
+				if (distA > distB) {
+					return 1;
+				} else if (distA == distB) {
+					return 0;
+				} else {
+					return -1;
+				}
+			});
+			enemiesLeek = arraySlice(enemiesLeek, 0, 5);
+			
+			Array res = [];
+			for(Leek enemy in enemiesLeek) {
+				push(res, enemy.id);
+			}
+			Cache.enemiesTargets = res;
+			return res;
+		} else {
+			Cache.enemiesTargets = alivesEnemies;
+			return alivesEnemies;
+		}
+	}
+	private real calcPrioSummon() {		
+		if (Cache.nbAlliesSummon >= 5) return 0;
+		return 80;
+	}
+	
+	static boolean isAlreadyBuff(integer leekId, integer itemId) {
+		if (Cache.items[itemId].effects[0][5] == 1) return false; // cumulable
+		for (Array buff in Cache.leeks[leekId].effects) {
+			if (itemId == buff[5]) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	private calcPrioRes() {
+		// HOTFIX KILL t1
+		if (!mapMin(Cache.entitiesOrder)) {
+			for (Leek leek in Cache.leeks) {
+				if (leek.ally && leek.type == ENTITY_LEEK && leek.life <= 0) {
+					this.priority = leek.totalLife * 2 / Cache.items[CHIP_RESURRECTION].cost;
+					this.entityToRes = leek.id;
+				}
+			}
+			return;
+		}
+		
+		integer mapMini = mapMin(Cache.entitiesOrder);
+		integer mapMaxi = mapMax(Cache.entitiesOrder);
+		for (integer leekId : integer leekOrder in Cache.entitiesOrder) {
+			if (Cache.leeks[leekId].life > 0 || !Cache.leeks[leekId].ally) {
+				continue;
+			} else {
+				var diff = Cache.entitiesOrder[leekId] - Cache.entitiesOrder[this.leek.id];
+				// cas stantard
+				if (diff < 4 && diff > 0) {
+					this.priority = Cache.leeks[leekId].totalLife / Cache.items[CHIP_RESURRECTION].cost;
+					this.entityToRes = leekId;
+					// cas pour res le 1er
+				} else if (Cache.entitiesOrder[leekId] == mapMini && Cache.entitiesOrder[this.leek.id] == mapMaxi) {
+					this.priority = Cache.leeks[leekId].totalLife / Cache.items[CHIP_RESURRECTION].cost;
+					this.entityToRes = leekId;
+				}
+			}
+		}
+	}
+	
+	private Object calcChatiment(Array effect, integer entity, Leek leek, real prio, real entityPrio) {
+		if (Cache.leeks[entity].damageReturn > 75 || entityPrio != 1) return {prio : 0, value: 0};
+		if (effect[5] == 0) { // first effect damage to enemy (hardcoded)
+				prio += leek.life * ((effect[1]/100) * (1 + leek.power / 100)) *
+ (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+		} else if (effect[5] == 4) { // second effect damage to me (hardcoded)
+			var tmp = leek.life * ((effect[1]/100) * (1 + leek.power / 100)) *
+ (1 - leek.relativeShield / 100) - leek.absoluteShield;
+			if (tmp > 0) {
+				prio -= leek.life * ((effect[1]/100) * (1 + leek.power / 100)) *
+ (1 - leek.relativeShield / 100) - leek.absoluteShield;
+			}
+		}
+		return {prio : prio, value: prio};
+	}
+	
+	static Array<Action> sortActions(Array<Action> actions, integer leekId) {
+		Operations.startOp('Leek : sortActions');
+		actions = arraySort(actions, function(action1, action2) {
+			if (action1.priority > action2.priority) {
+				return -1;
+			} else if (action1.priority < action2.priority) {
+				return 1;
+			} else {
+				/* @todo tester avant le arraySort si on a pas bougé ? et utiliser les mp des cells access dans ce cas uniquement pour la 1ère action */
+				// option 1 distance, c'est ok mais des fois nique tout les mp quand il y a un obstacle
+				integer dist1;
+				integer dist2;
+				/* @todo a debuger parce que ca doit marcher */
+				/*if (true) {
+					dist1 = Cache.leeks[leekId].getCellAccess()[action1.cellFrom];
+					dist2 = Cache.leeks[leekId].getCellAccess()[action2.cellFrom];
+				} else {*/
+					dist1 = getCellDistance(action1.cellFrom, Cache.leeks[leekId].cell);
+					dist2 = getCellDistance(action2.cellFrom, Cache.leeks[leekId].cell);	
+				//}
+				// option 2 path, trop couteux.
+				/*integer? dist1 = getPathLength(action1.cellFrom, Cache.leeks[leekId].cell, [Cache.leeks[leekId].cell]);
+				integer? dist2 = getPathLength(action2.cellFrom, Cache.leeks[leekId].cell, [Cache.leeks[leekId].cell]);*/				
+				return dist1 - dist2;
+			}
+		});
+		Operations.stopOp('Leek : sortActions');
+		return actions;
+	}
+	
+	real calcPrioPush(integer entity, real entityPrio) {
+		if (entityPrio < 1) return 0;
+		if (!Cache.leeks[entity].ally) {
+			var dist = 99;
+			var tmpDist;
+			integer cellX = getCellX(this.cellFrom);
+			integer cellY = getCellY(this.cellFrom);
+			Array<integer?> tab = [
+				getCellFromXY(getCellX(this.cellFrom)+8, getCellY(this.cellFrom)),
+				getCellFromXY(getCellX(this.cellFrom)-8, getCellY(this.cellFrom)),
+				getCellFromXY(getCellX(this.cellFrom), getCellY(this.cellFrom)+8),
+				getCellFromXY(getCellX(this.cellFrom), getCellY(this.cellFrom)-8),
+			];
+			for(integer? cell in tab) {
+				if (!cell) continue;
+				if (getCellDistance(Carte.calculateTeamCenter('enemy'), Cache.leeks[entity].cell) < getCellDistance(Carte.calculateTeamCenter('enemy'), cell)) continue;
+				tmpDist = getCellDistance(cell, Cache.leeks[entity].cell);
+				if (tmpDist < dist && tmpDist <= Cache.items[CHIP_BOXING_GLOVE].maxRange && lineOfSight(cell, this.cellFrom, [entity, this.leek.id])) {
+					dist = tmpDist;
+					this.cellTo = cell;
+				}
+			}
+			if (dist != 99) return dist * 50;
+		}
+		return 0;
+	}
+}

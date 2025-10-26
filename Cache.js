@@ -1,0 +1,588 @@
+include('Weapon');
+include('Chip');
+class Cache {
+	static Map<integer, Chip | Weapon> items = [:];
+	static Map<integer, Leek> leeks = [:];
+	static Map<integer, Leek> initLeeks = [:];
+	static Map<integer,boolean> effectBoost;
+	static Map<integer,boolean> chipsDamage;
+	static Map<integer,boolean> chipsPoison;
+	static Map<integer,boolean> chipsShield;
+	static Map<integer,boolean> chipsBoost;
+	static Map<integer,boolean> chipsHeal;
+	static Map<integer,boolean> chipsSummon;
+	static Map<integer,boolean> chipsDamageReturn;
+	static Map<integer,boolean> chipsPlacment;
+	static Map<integer,boolean> chipsShackle;
+	static Map<integer,boolean> effectsRaw = [:];
+	static Map<integer,Map> areaCell3 = [:];
+	static Map<integer,Map> areaCell2 = [:];
+	static Map<integer,Map> areaCell1 = [:];
+	static integer fightType;
+	static integer fightContext;
+	static BossFenouille|null Fenouille;
+	static Map<integer, Object> effectStatsLinks;
+	static integer nbAlliesSummon;
+	static Map<integer, integer>? entitiesOrder = [:];
+	static Array<integer> cellsToJump = [];
+	//static integer? oneCellSafeMap = null;
+	static integer? leekIdPassifShield = null;
+	static integer? leekIdPassifStrength = null;
+	static integer? leekIdPassifScience = null;
+	static integer? leekIdPassifCrit = null;
+	static integer? leekIdDarkKatana = null;
+	static Map<integer,boolean> targetAlly = [CHIP_ANTIDOTE:true, CHIP_MANUMISSION:true, WEAPON_B_LASER:true];
+	static Map<integer,boolean> chipsNeedUpdateActions = [CHIP_RESURRECTION:true, CHIP_MANUMISSION:true, CHIP_INVERSION:true, CHIP_GRAPPLE:true, CHIP_BOXING_GLOVE:true];
+	static Array<integer> primesNumbers = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607];
+	static integer? boss;
+	static Map<integer,integer> enemiesPrio;
+	static integer turn;
+	static Array<integer>? enemiesTargets = null;
+	static Map<integer,Array>? cellsTargetsEnemies = [:];
+	static Map<integer,Array>? cellsTargetsAllies = [:];
+	static integer? teamCenter = null;
+	static integer? enemyCenter = null;
+	static integer? invocTactic = null;
+	static boolean isVulneEnemy = true;
+	static Map<integer, Leek|Map> LeeksStates = [:];
+	static Map<integer, integer> safeMap = [:];
+	static Map<integer, integer> initMapDanger = [:];
+	static integer? oneCellSafeMap = null;
+	static boolean useLightSafeMap = false;
+	static boolean forceNoMove = false;
+	static integer? potironMalefique = null;
+	static Map effectToFunction = [:];
+	static Map<integer, Array<integer>> drawCells;
+	static Array<integer> nearDrawCells = [];
+	static boolean noMoreJump = false;
+	
+	public static initCache() {
+		//Operations.currentFunctionCall = 0;		
+		Cache.turn = getTurn();
+		Carte.setObstacles();
+		Cache.fightType = getFightType();
+		Cache.fightContext = getFightContext();
+		/*if (Cache.fightType == FIGHT_TYPE_TEAM || Cache.fightType == FIGHT_TYPE_FARMER) {
+			if (mapSize(Cache.safeMap) == 0) {
+				Cache.saveCacheFromMessage();
+			}
+			if (mapSize(Cache.safeMap) == 0) {
+				Carte.safeMap();
+			}
+		}*/
+		
+		Cache.getEffectsBoost();
+		Cache.getChipsDamgae();
+		Cache.getChipsPoison();
+		Cache.getChipsShield();
+		Cache.getChipsHeal();
+		Cache.getChipsBoost();
+		Cache.getChipsSummon();
+		Cache.getDamageReturn();
+		Cache.getChipsPlacment();
+		Cache.getChipsShackle();
+		Cache.getItems();
+		Cache.getAreaCell();
+		Carte.getDrawCells();
+		Cache.getIsVulneEnemy();
+		Cache.cellsToJump = Carte.getCellToJump();
+		Cache.getLeeks();
+		//Cache.getMeta();
+		Cache.getEffectStatsLinks();
+		Cache.getChipsRaw();
+		Cache.getNbAlliesSummon();
+		Cache.getEntityOrder();
+		Cache.getLeeksPassif();
+		Cache.boss = getFightBoss();
+		if (Cache.boss == BOSS_FENNEL_KING) {
+			Cache.Fenouille = new BossFenouille();
+		}
+		Cache.getFocusPrio();
+		Cache.getPotiron();
+	}
+	public static updateCache() {
+		//Operations.currentFunctionCall = 0;
+		Cache.turn = getTurn();
+		Cache.getLeeks();
+		Cache.getNbAlliesSummon();
+		Cache.getFocusPrio();
+		if (Cache.boss == BOSS_FENNEL_KING) {
+			Cache.Fenouille = new BossFenouille(); // rebuild path cristaux
+		}
+	}
+	public static resetCache() {
+		Cache.enemiesTargets = null;
+		//Cache.oneCellSafeMap = null;
+		Cache.cellsTargetsEnemies = [:];
+		Cache.cellsTargetsAllies = [:];
+		Cache.teamCenter = null;
+		Cache.enemyCenter = null;
+		Cache.invocTactic = null;
+	}
+	static resetLeeks() {
+		Operations.startOp('Cache : resetLeeks');
+        for (Leek leek in Cache.initLeeks) {
+            Cache.leeks[leek.id] = clone(Cache.initLeeks[leek.id]);
+        }
+		Operations.stopOp('Cache : resetLeeks');
+    }
+	static getItems() {
+		Operations.startOp('Cache : getItems');
+		for (integer itemId in getAllChips()) {
+			Chip item = new Chip(itemId);
+			Cache.items[itemId] = item;
+		}
+		for (integer itemId in getAllWeapons()) {
+			Weapon item = new Weapon(itemId);
+			Cache.items[itemId] = item;
+		}
+		Operations.stopOp('Cache : getItems');
+	}
+	static getLeeks() {
+		Operations.startOp('Cache : getLeeks');
+		Array<integer> allLeeks = arrayConcat(getAllies(), getEnemies());
+		Cache.leeks = [:];
+		for (integer leekId in allLeeks) {
+			if (!isAlive(leekId) && getType(leekId) != ENTITY_LEEK) continue;
+			Leek leek = new Leek(leekId);
+			Cache.leeks[leekId] = leek;
+			Cache.initLeeks[leekId] = clone(leek);
+		}
+		Operations.stopOp('Cache : getLeeks');
+	}	
+	static Map<integer,boolean> getChipsDamgae() {
+		Map<integer,boolean> res = [:];
+		for (var chip in getAllChips()) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_DAMAGE || effect[0] == EFFECT_POISON || effect[0] == EFFECT_NOVA_DAMAGE || effect[0] == EFFECT_LIFE_DAMAGE) {
+					res[chip] = true;
+				}
+			}
+		}
+		
+		Cache.chipsDamage = res;
+	}
+	
+	static Map<integer,boolean> getChipsPoison() {
+		Map<integer,boolean> res = [:];
+		for (var chip in getAllChips()) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_POISON) {
+					res[chip] = true;
+				}
+			}
+		}
+		
+		Cache.chipsPoison = res;
+	}
+	
+	static Map<integer,boolean> getChipsShield() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (integer chip in chips) {
+			Array effects = getChipEffects(chip);
+			for (Array effect in effects) {
+				// effect raw to add when needed
+				if (effect[0] == EFFECT_ABSOLUTE_SHIELD || effect[0] == EFFECT_RELATIVE_SHIELD) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsShield = res;
+	}
+	static Map<integer,boolean> getChipsBoost() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (mapContainsKey(Cache.effectBoost, effect[0])) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsBoost = res;
+	}
+	static Map<integer,boolean> getChipsHeal() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			if (chip == CHIP_INVERSION) continue;
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_HEAL || effect[0] == EFFECT_BOOST_MAX_LIFE) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsHeal = res;
+	}
+	static Map<integer,boolean> getChipsSummon() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_SUMMON) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsSummon = res;
+	}
+	
+	static Map<integer,boolean> getDamageReturn() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (effect[0] == EFFECT_DAMAGE_RETURN) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsDamageReturn = res;
+	}
+	
+	static Map<integer,boolean> getChipsShackle() {
+		Map<integer,boolean> res = [:];
+		var chips = getAllChips();
+		for (var chip in chips) {
+			var effects = getChipEffects(chip);
+			for (var effect in effects) {
+				if (inArray([EFFECT_SHACKLE_AGILITY, EFFECT_SHACKLE_MAGIC, EFFECT_SHACKLE_MP, EFFECT_SHACKLE_STRENGTH, EFFECT_SHACKLE_TP, EFFECT_SHACKLE_WISDOM], effect[0])) {
+					res[chip] = true;
+				}
+			}
+		}
+		Cache.chipsShackle = res;
+	}
+	
+	static Map<integer,boolean> getChipsPlacment() {
+		Cache.chipsPlacment = [
+			CHIP_JUMP:true,
+			CHIP_TELEPORTATION:true,
+			CHIP_GRAPPLE:true,
+			CHIP_BOXING_GLOVE:true,
+			CHIP_INVERSION:true,
+		];
+	}
+	
+	static Map<integer,boolean> getEffectsBoost() {
+		Cache.effectBoost = [EFFECT_RAW_BUFF_AGILITY:true,
+			EFFECT_RAW_BUFF_MAGIC:true,
+			EFFECT_RAW_BUFF_MP:true,
+			EFFECT_RAW_BUFF_RESISTANCE:true,
+			EFFECT_RAW_BUFF_SCIENCE:true,
+			EFFECT_RAW_BUFF_STRENGTH:true,
+			EFFECT_RAW_BUFF_TP:true,
+			EFFECT_RAW_BUFF_WISDOM:true,
+			EFFECT_RAW_BUFF_AGILITY:true,
+			// meme nombre raw que sans raw sinon il va en manquer
+			EFFECT_BUFF_AGILITY:true,
+			//EFFECT_BUFF_MAGIC:true,
+			EFFECT_BUFF_MP:true,
+			EFFECT_BUFF_RESISTANCE:true,
+			//EFFECT_BUFF_SCIENCE,
+			EFFECT_BUFF_STRENGTH:true,
+			EFFECT_BUFF_TP:true,
+			EFFECT_BUFF_WISDOM:true,
+			EFFECT_BUFF_AGILITY:true,
+			//EFFECT_AFTEREFFECT,
+			EFFECT_NOVA_VITALITY:true,
+		];
+	}
+	static Map<integer,Map> getAreaCell() {
+		Operations.startOp('Cache : getAreaCell');
+		for (integer cell = 0; cell < 613; cell++) {
+			if (getCellContent(cell) == CELL_OBSTACLE) continue;
+			Cache.areaCell3[cell] = Carte.areaLeek(cell, 3);
+			Cache.areaCell2[cell] = Carte.areaLeek(cell, 2);
+			Cache.areaCell1[cell] = Carte.areaLeek(cell, 1);
+		}
+		Operations.stopOp('Cache : getAreaCell');
+	}
+	
+	static getMeta() {
+		Array types = ['damagePerTp', 'maxDamagePerTp', 'minDamagePerTp'];
+		string type = types[1];
+		
+		Map<integer, Chip | Weapon> items = Cache.items;
+		Array<Weapon|Chip> itemArray = [];
+		for (var item in items) {
+			if (item[type] <= 0) continue;
+			push(itemArray, item);
+		}
+		var itemSorted = arraySort(itemArray, function(a, b) {
+			if (a[type] < b[type]) {
+				return 1
+			} else if (a[type] > b[type]) {
+				return -1
+			} else {
+				return 0;
+			}
+		});
+		
+		for (var item in itemSorted) {
+			debug('item : ' + item.name + ', itemId : ' + item.id + ', dmg : ' + item[type]);
+			debug(item);
+		}
+	}
+	
+	static getEffectStatsLinks() {
+		// @Todo utiliser une array plutot qu'une map, ça coute moins d'opé d'après Pilow
+		Cache.effectStatsLinks = [
+			EFFECT_ABSOLUTE_SHIELD: {operator: '+', stats: 'absoluteShield'},
+			EFFECT_ABSOLUTE_VULNERABILITY: {operator: '-', stats: 'absoluteShield'},
+			EFFECT_AFTEREFFECT: {operator: '-', stats: 'life'},
+			//EFFECT_ALLY_KILLED_TO_AGILITY: {operator: '+', stats: 'allyKilledToAgility'},
+			//EFFECT_BOOST_MAX_LIFE: {operator: '+', stats: ['totallife', 'life']},
+			EFFECT_BOOST_MAX_LIFE: {operator: '+', stats: 'life'}, // affect 2 stats in real but whatever
+			EFFECT_BUFF_AGILITY: {operator: '+', stats: 'agility'},
+			EFFECT_BUFF_MP: {operator: '+', stats: 'mp'},
+			EFFECT_BUFF_RESISTANCE: {operator: '+', stats: 'resistance'},
+			EFFECT_BUFF_STRENGTH: {operator: '+', stats: 'strength'},
+			EFFECT_BUFF_TP: {operator: '+', stats: 'tp'},
+			EFFECT_BUFF_WISDOM: {operator: '+', stats: 'wisdom'},
+			EFFECT_DAMAGE: {operator: '-', stats: 'life'},
+			EFFECT_DAMAGE_RETURN: {operator: '+', stats: 'damageReturn'},
+			//EFFECT_DAMAGE_TO_ABSOLUTE_SHIELD: {operator: '+', stats: 'damageToAbsoluteShield'},
+			//EFFECT_DAMAGE_TO_STRENGTH: {operator: '+', stats: 'damageToStrength'},
+			//EFFECT_DEBUFF: {operator: '+', stats: 'debuff'},
+			EFFECT_HEAL: {operator: '+', stats: 'life'},
+			EFFECT_INVERT: {operator: '-', stats: 'relativeShield'},
+			//EFFECT_KILL: {operator: '+', stats: 'kill'},
+			EFFECT_KILL_TO_TP: {operator: '+', stats: 'tp'},
+			EFFECT_LIFE_DAMAGE: {operator: '-', stats: 'life'},
+			//EFFECT_MODIFIER_IRREDUCTIBLE: {operator: '+', stats: 'modifierIrreductible'},
+			/*EFFECT_MODIFIER_MULTIPLIED_BY_TARGETS: {operator: '+', stats: 'modifierMultipliedByTargets'},
+			EFFECT_MODIFIER_NOT_REPLACEABLE: {operator: '+', stats: 'modifierNotReplaceable'},
+			EFFECT_MODIFIER_ON_CASTER: {operator: '+', stats: 'modifierOnCaster'},
+			EFFECT_MODIFIER_STACKABLE: {operator: '+', stats: 'modifierStackable'},*/
+			//EFFECT_MOVED_TO_MP: {operator: '+', stats: 'movedToMP'},
+			EFFECT_NOVA_DAMAGE: {operator: '-', stats: 'totalLife'},
+			EFFECT_NOVA_DAMAGE_TO_MAGIC: {operator: '+', stats: 'magic'},
+			EFFECT_NOVA_VITALITY: {operator: '+', stats: 'totalLife'},
+			EFFECT_POISON: {operator: '-', stats: 'life'},
+			EFFECT_POISON_TO_SCIENCE: {operator: '+', stats: 'science'},
+			//EFFECT_PROPAGATION: {operator: '+', stats: 'propagation'},
+			//EFFECT_PUSH: {operator: '+', stats: 'push'},
+			//EFFECT_RAW_ABSOLUTE_SHIELD: {operator: '+', stats: 'rawAbsoluteShield'},
+			EFFECT_RAW_BUFF_AGILITY: {operator: '+', stats: 'agility'},
+			EFFECT_RAW_BUFF_MAGIC: {operator: '+', stats: 'magic'},
+			EFFECT_RAW_BUFF_MP: {operator: '+', stats: 'mp'},
+			EFFECT_RAW_BUFF_POWER: {operator: '+', stats: 'power'},
+			EFFECT_RAW_BUFF_RESISTANCE: {operator: '+', stats: 'resistance'},
+			EFFECT_RAW_BUFF_SCIENCE: {operator: '+', stats: 'science'},
+			EFFECT_RAW_BUFF_STRENGTH: {operator: '+', stats: 'strength'},
+			EFFECT_RAW_BUFF_TP: {operator: '+', stats: 'tp'},
+			EFFECT_RAW_BUFF_WISDOM: {operator: '+', stats: 'wisdom'},
+			EFFECT_RAW_HEAL: {operator: '+', stats: 'life'},
+			EFFECT_RAW_RELATIVE_SHIELD: {operator: '+', stats: 'relativeShield'},
+			EFFECT_RELATIVE_SHIELD: {operator: '+', stats: 'relativeShield'},
+			//EFFECT_REMOVE_SHACKLES: {operator: '+', stats: 'removeShackles'},
+			//EFFECT_REPEL: {operator: '+', stats: 'repel'},
+			//EFFECT_RESURRECT: {operator: '+', stats: 'resurrect'},
+			EFFECT_SHACKLE_AGILITY: {operator: '+', stats: 'agility'},
+			EFFECT_SHACKLE_MAGIC: {operator: '+', stats: 'magic'},
+			EFFECT_SHACKLE_MP: {operator: '+', stats: 'mp'},
+			EFFECT_SHACKLE_STRENGTH: {operator: '+', stats: 'strength'},
+			EFFECT_SHACKLE_TP: {operator: '+', stats: 'tp'},
+			EFFECT_SHACKLE_WISDOM: {operator: '+', stats: 'wisdom'},
+			EFFECT_STEAL_ABSOLUTE_SHIELD: {operator: '+', stats: 'absoluteShield'},
+			//EFFECT_SUMMON: {operator: '+', stats: 'summon'},
+			/*EFFECT_TARGET_ALLIES: {operator: '+', stats: 'targetAllies'},
+			EFFECT_TARGET_CASTER: {operator: '+', stats: 'targetCaster'},
+			EFFECT_TARGET_ENEMIES: {operator: '+', stats: 'targetEnemies'},
+			EFFECT_TARGET_NON_SUMMONS: {operator: '+', stats: 'targetNonSummons'},
+			EFFECT_TARGET_SUMMONS: {operator: '+', stats: 'targetSummons'},
+			EFFECT_TELEPORT: {operator: '+', stats: 'teleport'},*/
+			EFFECT_VULNERABILITY: {operator: '-', stats: 'relativeShield'}
+		];
+	}
+
+	static getEffectToFunction() {
+		Cache.effectToFunction = [:];
+	}
+	
+	static getChipsRaw() {
+		Cache.effectsRaw = [
+			EFFECT_RAW_BUFF_AGILITY:true,
+			EFFECT_RAW_BUFF_MAGIC:true,
+			EFFECT_RAW_BUFF_MP:true,
+			EFFECT_RAW_BUFF_POWER:true,
+			EFFECT_RAW_BUFF_RESISTANCE:true,
+			EFFECT_RAW_BUFF_SCIENCE:true,
+			EFFECT_RAW_BUFF_STRENGTH:true,
+			EFFECT_RAW_BUFF_TP:true,
+			EFFECT_RAW_BUFF_WISDOM:true,
+			EFFECT_RAW_HEAL:true,
+			EFFECT_RAW_RELATIVE_SHIELD:true,
+		];
+	}
+
+	static getNbAlliesSummon() {
+		integer cptInvoc = 0;
+		for (Leek entity in Cache.leeks) {
+			if (entity.ally && entity.type == ENTITY_BULB) {
+				cptInvoc++;
+			}
+		}
+		Cache.nbAlliesSummon = cptInvoc;
+	}
+
+	static getEntityOrder() {
+		for (Leek leek in Cache.leeks) {
+			if (leek.type == ENTITY_LEEK) {
+				Cache.entitiesOrder[leek.id] = getEntityTurnOrder(leek.id);	
+			}
+		}
+	}
+
+	static getLeeksPassif() {
+		for (Leek leek in Cache.leeks) {
+			if (leek.ally) {
+				if (inArray(leek.weapons, WEAPON_REVOKED_M_LASER)) {
+					Cache.leekIdPassifStrength = leek.id;
+				}
+				if (inArray(leek.weapons, WEAPON_MYSTERIOUS_ELECTRISOR)) {
+					Cache.leekIdPassifShield = leek.id;
+				}
+				if (inArray(leek.weapons, WEAPON_ILLICIT_GRENADE_LAUNCHER)) {
+					Cache.leekIdPassifScience = leek.id;
+				}
+				if (inArray(leek.weapons, WEAPON_UNSTABLE_DESTROYER)) {
+					Cache.leekIdPassifCrit = leek.id;
+				}
+				if (inArray(leek.weapons, WEAPON_DARK_KATANA)) {
+					Cache.leekIdDarkKatana = leek.id;
+				}
+			}
+		}
+	}
+
+	// TODO Ajout de critères multiples en fonction des shields / vie / vie max / vulnérabilité / entity turn order
+	/*static getFocusPrio() {
+		Operations.startOp();
+		var myId = getEntity();
+		Map<integer,Leek> allies = mapFilter(Cache.leeks, function(a) {return (a.ally && a.type == ENTITY_LEEK && a.life>0);});
+		Map<integer,Leek> enemies = mapFilter(Cache.leeks, function(a) {return (!a.ally && a.type == ENTITY_LEEK && a.life>0);});
+		Map<integer,integer> cellEnemies = [:];
+		Map<integer,boolean> checkDone = [:];
+		for (Leek enemy in enemies) {
+			cellEnemies[enemy.id] = enemy.cell;
+		}
+
+		Cache.enemiesPrio = [:];
+		for (Leek ally in allies) {
+			checkDone[ally.id] = false;
+			for (integer cell : integer dist in ally.getCellAccess()) {
+				for (integer enemyId : integer cellEnemy in cellEnemies) {
+					Cache.enemiesPrio[enemyId] = 1;
+					//if (Cache.isEntityPlayBefore(enemyId, ally.id, myId)) continue;
+					if (!lineOfSight(cell, cellEnemy)) continue;
+					if (getCellDistance(cell, cellEnemy) > 10) continue;
+					if (getCellDistance(cell, cellEnemy) < 0) continue;
+					var cellFromX = getCellX(cell);
+					var cellFromY = getCellY(cell);
+					var cellToX = getCellX(cellEnemy);
+					var cellToY = getCellY(cellEnemy);
+					if ((!isOnSameLine(cell, cellEnemy)) || (abs(cellFromX-cellToX) != abs(cellFromY-cellToY) && !isOnSameLine(cell, cellEnemy))) continue;
+					Cache.enemiesPrio[enemyId]++;
+					checkDone[ally.id] = true;
+				}
+				if (checkDone[ally.id]) break;
+			}
+		}
+		debug('enemies prio : ' + Cache.enemiesPrio);
+		Operations.stopOp('Carte : getFocusPrio');
+	}*/
+
+	static void getFocusPrio() {
+		Operations.startOp('Cache : getFocusPrio');
+		Cache.enemiesPrio = [:];
+		Array<integer> enemies = [];
+		Array<integer> allies = [];
+		for (Leek entity in Cache.leeks) {
+			if (entity.type != ENTITY_LEEK || entity.life <= 0) continue;
+			if (entity.ally) {
+				push(allies, entity.id);
+			} else {
+				push(enemies, entity.id);
+				Cache.enemiesPrio[entity.id] = 1;
+			}
+		}
+		for (integer ally in allies) {
+			Cache.leeks[ally].actions = Cache.leeks[ally].getActions([WEAPON_HEAVY_SWORD], Cache.leeks[ally].getCellAccess());
+		}
+		for (integer ally in allies) {
+			Map<integer, boolean> alreadyAdded = [:];
+			for (Action action in Cache.leeks[ally].actions) {
+				for (integer enemy in enemies) {
+					if (alreadyAdded[enemy]) break;
+					for (Target target in action.targets) {
+						if (alreadyAdded[enemy]) break;
+						if (target.leekId == enemy) {
+							Cache.enemiesPrio[enemy]++;
+							alreadyAdded[enemy] = true;
+						}
+					}
+				}
+			}
+		}
+		debug('enemies prio : ' + Cache.enemiesPrio);
+		Operations.stopOp('Cache : getFocusPrio');
+	}
+
+
+	static boolean isEntityPlayBefore(integer leekId1, integer leekId2, integer leekIdToPlay) {
+    // Récupérer l'ordre de jeu des entités
+		integer orderLeek1 = Cache.entitiesOrder[leekId1];
+		integer orderLeek2 = Cache.entitiesOrder[leekId2];
+		integer currentOrder = Cache.entitiesOrder[leekIdToPlay];
+
+		// Déterminer si l'ordre de leekId1 est avant celui de leekId2 en tenant compte de l'entité en train de jouer
+		if (currentOrder <= orderLeek1 && currentOrder <= orderLeek2) {
+			// Si les deux entités jouent après ou pendant l'entité en cours de jeu
+			return orderLeek1 < orderLeek2;
+		} else if (currentOrder > orderLeek1 && currentOrder > orderLeek2) {
+			// Si les deux entités jouent avant l'entité en cours de jeu
+			return orderLeek1 < orderLeek2;
+		} else {
+			// Si l'une des entités joue avant et l'autre après l'entité en cours de jeu
+			return currentOrder <= orderLeek1;
+		}
+	}
+
+	static getIsVulneEnemy() {
+		Array<integer> enemies = getAliveEnemies();
+		for (integer enemy in enemies) {
+			if (!isSummon(enemy) && !inArray(getWeapons(enemy), WEAPON_J_LASER)) {
+				Cache.isVulneEnemy = false;
+				return;
+			}
+		}
+	}
+	
+	static saveCacheFromMessage() {
+		Array messages = getMessages();
+		for (Array message in messages) {
+			if (message[1] == MESSAGE_MOVE_TOWARD_CELL) {
+				Cache.safeMap = message[2];
+			}
+		}
+	}
+
+	static getPotiron() {
+		if (Cache.boss == BOSS_EVIL_PUMPKIN) {
+			for (integer id in getEnemies()) {
+				if (getName(id) == "evil_pumpkin") {
+					Cache.potironMalefique = id;
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,590 @@
+include('ScoringFunction');
+class Scoring {
+    static integer RELATIVE = 6;
+    static real VULNERABILITY = 2.0;
+    static real ABSOLUTE = 0.8;
+    static integer HEAL = 1;
+    static real NOVA = 0.5;
+    static real GENERIC_STATS = 0.2;
+    static real STRENGTH = 0.4;
+    static real RESISTANCE = 0.7;
+    static real MAGIC = 0.6;
+    static integer TP = 120;
+    static real DAMAGE_RETURN = 1.0;
+    static Map<integer, ScoringFunction> Effects = [
+        /** ------------ Boost ----------- */
+        EFFECT_BUFF_MP                : new ScoringFunction(Scoring.getPrioBuffMp),
+        EFFECT_RAW_BUFF_MP            : new ScoringFunction(Scoring.getPrioRawBuffMp),
+        EFFECT_BUFF_TP                : new ScoringFunction(Scoring.getPrioBuffTp),
+        EFFECT_RAW_BUFF_TP            : new ScoringFunction(Scoring.getPrioRawBuffTp),
+        EFFECT_NOVA_VITALITY          : new ScoringFunction(Scoring.getPrioNovaVitality),
+        EFFECT_BUFF_STRENGTH          : new ScoringFunction(Scoring.getPrioBuffStrength),
+        EFFECT_BUFF_AGILITY           : new ScoringFunction(Scoring.getPrioBuffAgility),
+        EFFECT_RAW_BUFF_WISDOM        : new ScoringFunction(Scoring.getPrioRawBuffGeneric),
+        EFFECT_RAW_BUFF_AGILITY       : new ScoringFunction(Scoring.getPrioRawBuffGeneric),
+        EFFECT_RAW_BUFF_SCIENCE       : new ScoringFunction(Scoring.getPrioRawBuffGeneric),
+        EFFECT_RAW_BUFF_RESISTANCE    : new ScoringFunction(Scoring.getPrioRawBuffResistance),
+        EFFECT_RAW_BUFF_STRENGTH      : new ScoringFunction(Scoring.getPrioRawBuffStrength),
+        EFFECT_RAW_BUFF_MAGIC         : new ScoringFunction(Scoring.getPrioRawBuffMagic),
+        /** ------------ Heal ----------- */
+        EFFECT_HEAL                   : new ScoringFunction(Scoring.getPrioHeal),
+        EFFECT_BOOST_MAX_LIFE         : new ScoringFunction(Scoring.getPrioBoostMaxLife),
+        EFFECT_RAW_HEAL               : new ScoringFunction(Scoring.getPrioRawHeal),
+        /** ------------ Damage ----------- */
+        EFFECT_DAMAGE                 : new ScoringFunction(Scoring.getPrioDamage),
+        EFFECT_NOVA_DAMAGE            : new ScoringFunction(Scoring.getPrioNovaDamage),
+        EFFECT_DAMAGE_RETURN          : new ScoringFunction(Scoring.getPrioDamageReturn),
+        EFFECT_POISON                 : new ScoringFunction(Scoring.getPrioPoison),
+        EFFECT_AFTEREFFECT            : new ScoringFunction(Scoring.getPrioAfterEffect),
+        // marche pas à cause du target caster
+        EFFECT_LIFE_DAMAGE         : new ScoringFunction(Scoring.getPrioLifeDamage),
+        /** ------------ Shield ----------- */
+        EFFECT_ABSOLUTE_VULNERABILITY : new ScoringFunction(Scoring.getPrioAbsoluteVulnerability),
+        EFFECT_STEAL_ABSOLUTE_SHIELD  : new ScoringFunction(Scoring.getPrioStealAbsoluteShield),
+        EFFECT_VULNERABILITY          : new ScoringFunction(Scoring.getPrioVulnerability),
+        EFFECT_ABSOLUTE_SHIELD        : new ScoringFunction(Scoring.getPrioAbsoluteShield),
+        EFFECT_RELATIVE_SHIELD        : new ScoringFunction(Scoring.getPrioRelativeShield),
+        /** ------------ Shackle ----------- */
+        EFFECT_SHACKLE_STRENGTH       : new ScoringFunction(Scoring.getPrioShackleStrength),
+        EFFECT_SHACKLE_AGILITY        : new ScoringFunction(Scoring.getPrioShackleAgility),
+        EFFECT_SHACKLE_TP             : new ScoringFunction(Scoring.getPrioShackleTp),
+        EFFECT_SHACKLE_MP             : new ScoringFunction(Scoring.getPrioShackleMp),
+        EFFECT_REMOVE_SHACKLES        : new ScoringFunction(Scoring.getPrioRemoveShackles),
+        EFFECT_DEBUFF                 : new ScoringFunction(Scoring.getPrioDebuff),
+        EFFECT_ANTIDOTE               : new ScoringFunction(Scoring.getPrioAntidote),
+    ];
+
+    static Map<integer, ScoringFunction> Placment = [
+        /** ------------ Déplacement ----------- */
+        EFFECT_PUSH                : new ScoringFunction(Scoring.getPrioPush),
+        EFFECT_ATTRACT             : new ScoringFunction(Scoring.getPrioAttract),
+        EFFECT_INVERT              : new ScoringFunction(Scoring.getPrioInvert),
+    ];
+
+    public static Object getPrioDamage(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.boss == BOSS_FENNEL_KING) {
+            if (inArray(Cache.Fenouille.critauxId, Cache.leeks[entity].id) && Cache.Fenouille.graal.invulne) {
+                return {prio : 0, value: 0};
+            }
+        }
+        /* @todo calculer réellement les renvoi de damages, facile en utilisant la value */
+        var valueBeforeShield = effect[1] * areaMulti * ( 1 + Cache.leeks[leek.id].strength/100) * (1 + Cache.leeks[leek.id].power / 100);
+        var crit = Cache.leeks[leek.id].agility >= 900 ? CRITICAL_FACTOR : 1; // Trust
+        var value = valueBeforeShield * crit * (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+        if (value < 0) value = 0;
+
+        /* Renvoi de domage */
+        prio -= valueBeforeShield * (Cache.leeks[entity].damageReturn / 100);
+        /* Vol de vie */
+        real maxHeal = Cache.leeks[leek.id].totalLife - Cache.leeks[leek.id].life;
+        if (maxHeal > 0) {
+            var healValue = value * Cache.leeks[leek.id].wisdom / 1000;
+            maxHeal = (healValue > maxHeal) ? maxHeal * HEAL : healValue * HEAL;    
+        }
+        /* Erosion */
+        var erosion = value * 0.05 * NOVA;
+
+        if (Cache.leeks[entity].ally) {
+            if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
+                if (value >= Cache.leeks[entity].life) {
+                    return {prio : -10000, value: value};
+                } else {
+                    prio -= (value  + erosion) * entityPrio / (item.cost+1);
+                }
+            } else {
+                if (value >= Cache.leeks[entity].life) {
+                    return {prio : -10000, value: value};
+                } else {
+                    prio -= (value  + erosion) * entityPrio / (item.cost+1);
+                }
+            }
+        } else {
+            if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
+            prio += (value  + maxHeal + erosion * entityPrio / (item.cost+1));
+            } else {
+                prio += (value  + maxHeal + erosion * entityPrio / item.cost);
+            }
+        }
+        if (effect[5] >= 4 && prio > 0) { // EFFECT_ON_CAST
+            prio = -prio;
+        }
+        
+        return {prio : prio, value: value};
+    }
+
+    public static Object getPrioBuffMp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            return {prio : 0, value: 0};
+        }
+        integer duration = effect[3] != 0 ? effect[3] : 1;
+        var value = effect[1] * areaMulti * (1 + leek.science / 100);
+        prio += effect[1] * areaMulti * (1 + leek.science / 100) * duration * entityPrio * 20;
+        return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioRawBuffMp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            return {prio : 0, value: 0};
+        }
+       	var value = effect[1];
+		prio += effect[1] * effect[3] * entityPrio * 20;
+        return {prio : prio / item.cost, value: value};
+    }
+
+     public static Object getPrioBuffTp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            return {prio : 0, value: 0};
+        }
+        integer duration = effect[3] != 0 ? effect[3] : 1;
+        real oldValue = 0;
+        if (item.effects[0][5] == 0) { // non cumulable
+            for (Array buff in Cache.leeks[entity].effects) {
+                if (item.id == buff[5]) {
+                    oldValue = buff[1];
+                }
+            }
+        }
+        var value = effect[1] * areaMulti * (1 + leek.science / 100) - oldValue;
+        prio += value * duration * entityPrio * (TP + (Cache.leeks[entity].strength / 200));
+        return {prio : prio / item.cost, value: value};
+    }
+
+     public static Object getPrioRawBuffTp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.leeks[entity].type != ENTITY_LEEK) return {prio : 0, value: 0};
+        var prio = 0;
+        if (!Cache.leeks[entity].ally || item.id == CHIP_MANUMISSION) {
+            return {prio : 0, value: 0};
+        }
+		prio += effect[1] * effect[3] * entityPrio * (TP + (Cache.leeks[entity].strength / 200));
+        return {prio : prio / item.cost, value: effect[1]};
+    }
+
+    public static Object getPrioNovaVitality(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        var value = effect[1] * areaMulti * (1 + Cache.leeks[leek.id].science / 100);
+        real multiplicator = (10000 - Cache.leeks[entity].totalLife) / 1000;
+		
+        if (Cache.leeks[entity].ally) {
+            prio += value * multiplicator / item.cost;
+        } else {
+            prio -= value * multiplicator / item.cost;
+        }
+        return {prio : prio * NOVA, value: value};
+    }
+
+    public static Object getPrioRawBuffResistance(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+        prio += effect[1] * effect[3] * RESISTANCE * entityPrio * statsMultiplicator;
+        return {prio : prio / item.cost, value: effect[1]};
+    }
+
+    public static Object getPrioBuffStrength(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            return {prio : 0, value: 0};
+        }
+        if (Cache.leeks[entity].strength < 399 || Cache.leeks[entity].life < 1000) {
+			return {prio : -prio / item.cost, value: 0};
+        }
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+        var value = effect[1] * areaMulti * (1 + leek.science / 100);
+		prio += effect[1] * areaMulti * (1 + leek.science / 100) * effect[3] * STRENGTH * entityPrio * statsMultiplicator;
+        
+        return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioRawBuffStrength(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].strength < 399) {
+			return {prio : -20, value: 0};
+        }
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+		prio += effect[1] * effect[3] * STRENGTH * entityPrio * statsMultiplicator;
+        return {prio : prio / item.cost, value: effect[1]};
+    }
+
+    public static Object getPrioRawBuffMagic(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].magic < 400) {
+			return {prio : -20, value: 0};
+        }
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+		prio += effect[1] * effect[3] * MAGIC * entityPrio * statsMultiplicator;
+        return {prio : prio / item.cost, value: effect[1]};
+    }
+
+    public static Object getPrioRawBuffGeneric(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (entity == -1) return {prio : 0, value: 0}; // chip deplacement
+        if (!Cache.leeks[entity].ally) return {prio : 0, value : 0};
+        var prio = 0;
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+        var value = effect[1];
+		prio += effect[1] * effect[3] * GENERIC_STATS * entityPrio * statsMultiplicator;
+        if (leek.id != entity) prio -= 10; // pour l'ordre d'utilisation, toujours sur soit en first
+        return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioBuffAgility(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            return {prio : 0, value: 0};
+        }
+        var value = effect[1] * areaMulti * (1 + leek.science / 100);
+        real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
+		prio += effect[1] * areaMulti * (1 + leek.science / 100) * effect[3] * GENERIC_STATS * entityPrio * statsMultiplicator;
+        return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioHeal(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (item.id == CHIP_ANTIDOTE) return {prio : 0, value: 0};
+        if (Cache.leeks[entity] == null) {
+            debug('entity with no cache : ' + entity);pause();
+        }
+        real maxHeal = Cache.leeks[entity].totalLife - Cache.leeks[entity].life;
+        if (item.id == CHIP_REGENERATION && maxHeal < 1800) return {prio : 0, value: 0};
+        var value = (effect[1] * areaMulti * (1 + Cache.leeks[leek.id].wisdom / 100));
+        
+        if (value > maxHeal) {
+            value = maxHeal;
+        }
+
+        var multiplicatorHeal = (Cache.leeks[entity].life < Cache.leeks[entity].totalLife / 2) ? 2 : 1;
+    
+		if (!Cache.leeks[entity].ally) {
+			prio -= effect[3] == 0 ? value * multiplicatorHeal : value * multiplicatorHeal * effect[3] * 1;
+		} else {
+			prio += effect[3] == 0 ? value : value * effect[3];
+			if (Cache.leeks[entity].life < Cache.leeks[entity].totalLife / 2) {
+				prio *= 3;
+			}
+		}
+		return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioBoostMaxLife(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value : 0};
+        var value = (effect[1] * areaMulti * (1 + Cache.leeks[leek.id].wisdom / 100));
+		real multiplicator = (10000 - Cache.leeks[entity].totalLife) / 1000;
+		if (!Cache.leeks[entity].ally) {
+			prio -= value + value * multiplicator;
+		} else {
+			prio += value + value * multiplicator;
+		}
+		return {prio : prio / item.cost, value: prio};
+    }
+
+    public static Object getPrioRawHeal(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        real maxHeal = Cache.leeks[leek.id].totalLife - Cache.leeks[leek.id].life;
+        if (maxHeal >= 100) {
+            return {prio : 100 / item.cost, value: 100};
+        } else {
+            return {prio : 0, value: 0};
+        }
+    }
+
+    public static Object getPrioNovaDamage(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].type == ENTITY_BULB)  return {prio : 0, value: 0};
+        if (Cache.leeks[entity].ally) {
+            prio -= abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, effect[1] * areaMulti * (1 + leek.science / 100)));
+        } else {
+            prio += abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, effect[1] * areaMulti * (1 + leek.science / 100)));
+        }
+        return {prio : prio / item.cost, value: prio};
+    }
+
+    public static Object getPrioDamageReturn(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        /* For Chatiment ? */
+        //if (!Cache.leeks[entity].needShield) return {prio : 0, value: 0};
+        if (item.id == CHIP_BRAMBLE && (Cache.leeks[entity].life > 1800 || Cache.leeks[entity].type == ENTITY_BULB)) return {prio : 0, value: 0};
+        
+		var value = (effect[1] * areaMulti * (1 + leek.getAgility() / 100)) * effect[3];
+		var prio = value * DAMAGE_RETURN;
+		return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioAbsoluteVulnerability(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        var crit = Cache.leeks[leek.id].agility >= 900 ? CRITICAL_FACTOR : 1; // Trust
+        var value = effect[1] * crit;
+        if (Cache.leeks[entity].ally) {
+            prio -= (value * effect[3] * entityPrio) * ABSOLUTE;
+        } else {
+            prio += (value * effect[3] * entityPrio) * ABSOLUTE;
+        }
+        return {prio : prio / item.cost, value : value}
+    }
+
+    public static Object getPrioStealAbsoluteShield(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        prio += effect[1] * effect[3] / item.cost;
+        return {prio : prio, value : effect[1]}
+    }
+
+    public static Object getPrioVulnerability(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.boss == BOSS_FENNEL_KING) {
+            if (inArray(Cache.Fenouille.critauxId, Cache.leeks[entity].id) && Cache.Fenouille.graal.invulne) {
+                return {prio : 0, value: 0};
+            }
+        }
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0}; 
+        var prio = 0;
+        if (Cache.leeks[entity].ally) {
+            prio -= (effect[1] * RELATIVE * VULNERABILITY * effect[3]) / item.cost;
+        } else {
+            prio += (effect[1] * RELATIVE * VULNERABILITY * entityPrio * areaMulti * effect[3]) / item.cost;
+        }
+
+        if (effect[5] >= 4 && prio > 0) { // EFFECT_ON_CAST
+            prio = -prio;
+        }
+        return {prio : prio, value: effect[1]};
+    }
+
+    public static Object getPrioShackleStrength(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (entity == -1) return {prio : 0, value: 0}; // deplacement chip
+        var prio = 0;
+        if (Cache.leeks[entity].strength < 350) return {prio : 0, value: 0};
+        var value = effect[1] * (1 + leek.magic / 100) * effect[3];
+        if (Cache.leeks[entity].ally) {
+            prio -= value / item.cost;
+        } else {
+            prio += value / item.cost;
+        }
+        return {prio : prio, value: value};
+    }
+
+    public static Object getPrioShackleTp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};
+        if (effect[5] == 0) { // not cummulable item, should to it globally ?
+            for (Array effectEntity in Cache.leeks[entity].effects) {
+                if (effectEntity[5] == item.id) {
+                    return {prio : 0, value: 0};
+                }
+            }
+        }
+        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
+        if (value == 0) return{prio: 0, value:0};
+        var multiplicatorTP = (Cache.leeks[entity].strength >= 400 || Cache.leeks[entity].magic >= 400) ? TP : TP - 5;
+        var prio = 0;
+        if (Cache.leeks[entity].ally) {
+            prio -= (value * effect[3]) * multiplicatorTP;
+        } else {
+            prio += (value * effect[3]) * multiplicatorTP;
+        }
+        return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioShackleMp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0}; 
+        var prio = 0;
+        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
+        if (value == 0) return{prio: 0, value:0};
+        if (Cache.leeks[entity].ally) {
+            prio -= value * effect[3] * 70;
+        } else {
+            prio += value * effect[3] * 70;
+        }
+        return {prio : prio  / item.cost, value: value};
+    }
+
+    public static Object getPrioRemoveShackles(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};	
+		for (Array entityEffect in Cache.leeks[entity].effects) {
+			if (entityEffect[0] == EFFECT_SHACKLE_STRENGTH) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) / 2;
+			} else if (entityEffect[0] == EFFECT_SHACKLE_TP) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * 5;
+			} else if (entityEffect[0] == EFFECT_SHACKLE_MP) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1)));
+			}
+		}
+		return {prio : prio, value: 0}; // on update pas les gains ici ?
+    }
+
+    public static Object getPrioDebuff(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        if (Cache.leeks[entity].type == ENTITY_BULB || Cache.leeks[entity].ally) return {prio : 0, value: 0};
+		for (Array entityEffect in Cache.leeks[entity].effects) {
+			if (entityEffect[0] == EFFECT_POISON) {
+				prio -= entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1));
+			} else if(entityEffect[0] == EFFECT_ABSOLUTE_SHIELD) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * ABSOLUTE; // for mytic item
+			} else if(entityEffect[0] == EFFECT_RELATIVE_SHIELD) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * RELATIVE;	
+			} else if (entityEffect[0] == EFFECT_RAW_ABSOLUTE_SHIELD) {
+				prio += entityEffect[1] * (entityEffect[3] -1) * ABSOLUTE;
+			} else if(entityEffect[0] == EFFECT_BUFF_STRENGTH || entityEffect[0] == EFFECT_RAW_BUFF_STRENGTH) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * STRENGTH;
+            } /*else if (entityEffect[0] == EFFECT_AFTEREFFECT) {
+                prio -= entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1));
+			}*/ else if(entityEffect[0] == EFFECT_BUFF_TP || entityEffect[0] == EFFECT_RAW_BUFF_TP) {
+				prio += (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * TP;
+			} else if (entityEffect[0] == EFFECT_VULNERABILITY) {
+				prio -= (entityEffect[1] - entityEffect[3]) * RELATIVE;
+			} else if (entityEffect[0] == EFFECT_ABSOLUTE_VULNERABILITY) {
+				prio -= (entityEffect[1] - entityEffect[3]) * ABSOLUTE;
+			} else if (entityEffect[0] == EFFECT_SHACKLE_TP) {
+                prio -= (entityEffect[1] + (entityEffect[1] * (entityEffect[3] -1))) * TP;
+            }
+		}
+		return {prio : prio * entityPrio / item.cost, value: 0}; // on update pas les gains ici ?
+    }
+
+    public static Object getPrioPoison(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.boss == BOSS_FENNEL_KING) {
+            if (inArray(Cache.Fenouille.critauxId, Cache.leeks[entity].id) && Cache.Fenouille.graal.invulne) {
+                return {prio : 0, value: 0};
+            }
+        }
+        if (Cache.leeks[entity].type == ENTITY_BULB && item.cooldown > 0) return {prio:0,value:0};
+        if (Cache.leeks[entity].life <= Cache.leeks[entity].getPassiveDamage()) return {prio:0,value:0};
+        var prio = 0;
+        var value = effect[1] * areaMulti * (1 + leek.magic/100) * effect[3];
+        if (!Cache.leeks[entity].ally) {
+            prio += value;
+        } else if (Cache.leeks[entity].id == Cache.leekIdPassifScience && Cache.leeks[entity].getPassiveDamage() < 800 && value < 600) {
+            prio += value;
+        } else {
+            prio -= value;
+        }
+        return {prio : prio / item.cost, value: value};
+    }
+
+    // marche pas à cause du target caster
+    public static Object getPrioLifeDamage(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        if (Cache.leeks[entity].damageReturn > 75 || Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};
+        var prio = 0;
+        var crit = Cache.leeks[leek.id].agility >= 900 ? CRITICAL_FACTOR : 1; // Trust
+		var value = Cache.leeks[leek.id].life * (((effect[1]*crit)/100) * (1 + Cache.leeks[leek.id].power / 100)) *
+ (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+        value = max(0, value);
+
+        if (Cache.leeks[entity].ally) {
+            prio -= value * entityPrio / item.cost;
+        } else {
+            prio += value * entityPrio / item.cost;
+        }        
+		return {prio : prio, value: value};
+    }
+
+    public static Object getPrioAbsoluteShield(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        //if (!(effect[4] & EFFECT_TARGET_NON_SUMMONS)) return {prio: 0, value: 0};
+        if (!Cache.leeks[entity].needShield) return {prio: 0, value: 0};
+        if (effect[4] == 22) return {prio : 0, value: 0};
+		
+		real multiplicatorAbsolute = (250 - Cache.leeks[entity].absoluteShield) / 100;
+		var value = effect[1] * areaMulti * (1 + Cache.leeks[leek.id].resistance / 100);
+		var prio = (value * effect[3] * entityPrio * multiplicatorAbsolute) * ABSOLUTE;
+		return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioRelativeShield(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        /* Pilow gagne sans shield contre NS */
+        /*if (!Cache.leeks[entity].needShield) return {prio: 0, value: 0};*/
+        if (item.id == CHIP_DOME && entity == leek.id) return {prio: 0, value: 0};
+        if (!Cache.leeks[entity].ally || Cache.leeks[entity].type == ENTITY_BULB) return {prio: 0, value: 0};
+        
+		//if (!(effect[4] & EFFECT_TARGET_NON_SUMMONS)) return {prio: 0, value: 0};
+		if (Cache.leeks[entity].relativeShield > 90) return {prio: 0, value: 0}; // try to keep shield cooldown
+		real multiplicatorRelative = (100 - Cache.leeks[entity].relativeShield) / 50;
+
+        real oldValue = 0;
+        if (item.effects[0][5] == 0) { // non cumulable
+            for (Array buff in Cache.leeks[entity].effects) {
+                if (item.id == buff[5]) {
+                    oldValue = buff[1];
+                }
+            }
+        }
+        var value = effect[1] * areaMulti * (1 + Cache.leeks[leek.id].resistance / 100) - oldValue;
+        var prio = value * effect[3] * RELATIVE * entityPrio * multiplicatorRelative;		
+		return {prio : prio / item.cost, value: value};
+    }
+
+    public static Object getPrioShackleAgility(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        return {prio : 0, value : 0};
+    }
+
+    public static Object getPrioInvert(Array effect, integer cellFrom, integer cellTo, integer entity) {
+        return {prio : 0, value : 0};
+    }
+
+    public static Object getPrioPush(Array effect, integer cellFrom, integer cellTo, integer entity) {
+        if (Cache.boss == BOSS_FENNEL_KING) {
+			var prio = Cache.Fenouille.getPrio(entity, Cache.items[CHIP_BOXING_GLOVE], Cache.leeks[getEntity()], cellFrom, cellTo);
+            return {prio : prio, value : 0};
+		}
+        if (!Carte.isEmptyCell) return {prio : 0, value : 0};
+        if (Cache.leeks[entity].cell == cellTo) return {prio : 0, value : 0};
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            var cellCenter = Carte.calculateTeamCenter('enemy');
+            var d1 = getCellDistance(Cache.leeks[entity].cell, cellCenter);
+            var d2 = getCellDistance(cellTo, cellCenter);
+            if (d2 > d1) {
+                prio = (d2 - d1) * 1000;
+            }
+        }
+        
+        return {prio : prio, value : 0};
+    }
+
+    public static Object getPrioAttract(Array effect, integer cellFrom, integer cellTo, integer entity) {
+        if (Cache.boss == BOSS_FENNEL_KING) {
+			var prio = Cache.Fenouille.getPrio(entity, Cache.items[CHIP_GRAPPLE], Cache.leeks[getEntity()], cellFrom, cellTo);
+            return {prio : prio, value : 0};
+		}
+        if (!Carte.isEmptyCell) return {prio : 0, value : 0};
+        if (Cache.leeks[entity].cell == cellTo) return {prio : 0, value : 0};
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            var cellCenter = Carte.calculateTeamCenter('enemy');
+            var d1 = getCellDistance(Cache.leeks[entity].cell, cellCenter);
+            var d2 = getCellDistance(cellTo, cellCenter);
+            if (d2 > d1) {
+                prio = (d2 - d1) * 1000;
+            }
+        }
+        return {prio : prio, value : 0};
+    }
+
+    public static Object getPrioAfterEffect(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        var value = effect[1] * areaMulti * (1 + leek.science / 100) * effect[3];
+        if (Cache.leeks[entity].life < value) {
+            return {prio : 0, value : 0};
+        } else {
+            return {prio : prio, value : 0};
+        }
+    }
+
+    public static Object getPrioAntidote(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        boolean isCovid = false;
+		real cumulDegats = 0;
+        var prio = 0;
+		for (Array entityEffect in Cache.leeks[entity].effects) {
+			if (entityEffect[0] == EFFECT_POISON) {
+				cumulDegats += entityEffect[1];
+			}
+			if (entityEffect[5] == CHIP_COVID) isCovid = true;
+		}
+        
+		if (cumulDegats >= Cache.leeks[entity].life || isCovid) {
+			return {prio : 9999, value : 0}; // safe ally
+		}
+        if (cumulDegats > 1200 && entity != Cache.leekIdPassifScience) {
+            prio = cumulDegats / item.cost; 
+        }
+
+		return {prio : prio, value : 0};
+    }
+}

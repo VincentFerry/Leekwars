@@ -1,0 +1,187 @@
+class BossFenouille {
+	// Object this pour accéder à l'object
+	Leek graal;
+	Leek cBleu;
+	Leek cVert;
+	Leek cJaune;
+	Leek cRouge;
+	integer destBleu = 120;
+	integer destVert = 85;
+	integer destJaune = 84;
+	integer destRouge = 119;
+	Array<integer>? pathBleu = [];
+	Array<integer>? pathVert = [];
+	Array<integer>? pathJaune = [];
+	Array<integer>? pathRouge = [];
+	Array critauxId = [];
+	Array<Leek> cristaux;
+	
+	constructor() {
+		Array enemies = getAliveEnemies();
+		for (integer enemy in enemies) {
+			if (Cache.leeks[enemy].name == "graal") {
+				this.graal = Cache.leeks[enemy];
+			}
+			if (Cache.leeks[enemy].name == "blue_crystal") {
+				this.cBleu = Cache.leeks[enemy];
+			}
+			if (Cache.leeks[enemy].name == "green_crystal") {
+				this.cVert = Cache.leeks[enemy];
+			}
+			if (Cache.leeks[enemy].name == "yellow_crystal") {
+				this.cJaune = Cache.leeks[enemy];
+			}
+			if (Cache.leeks[enemy].name == "red_crystal") {
+				this.cRouge = Cache.leeks[enemy];
+			}
+		}
+		critauxId = [
+			this.cBleu.id,
+			this.cVert.id,
+			this.cJaune.id,
+			this.cRouge.id,
+		];
+		cristaux = [
+			this.cBleu,
+			this.cVert,
+			this.cJaune,
+			this.cRouge,
+		];
+		//define path
+		this.getCellsTargets();
+	}
+	
+	integer getPrio(integer entity, Item item, Leek leek, integer cellFrom, integer cellTo) {
+		//debug('here1');
+		if (!inArray(this.critauxId, entity)) return 0;
+		//debug('here2');
+		if (cellFrom == cellTo) return 0;
+		//debug('here3');
+		if (cellTo == Cache.leeks[entity].cell) return 0;
+		//debug('here4');
+		if (item.id == CHIP_INVERSION) {
+			integer yDiff = getCellY(Cache.leeks[entity].cell) - getCellY(leek.cell);
+			if (yDiff < 0) {
+				return abs(yDiff) * 10;
+			}
+		}
+		// devrait pas avoir a faire ces tests !!
+		/*if (getCellDistance(Cache.leeks[entity].cell, leek.cell) <= 1 && item.id == CHIP_GRAPPLE) return 0;
+		if (getCellDistance(Cache.leeks[entity].cell, leek.cell) > 1 && item.id == CHIP_BOXING_GLOVE) return 0;*/
+		//debug('here5');
+		integer prio = 0;
+		
+		if (entity == this.cBleu.id) {
+			prio = this.getPrioBleu(entity, item, leek, cellFrom, cellTo);
+		}
+		if (entity == this.cJaune.id) {
+			prio = this.getPrioJaune(entity, item, leek, cellFrom, cellTo);
+		}
+		if (entity == this.cVert.id) {
+			prio = this.getPrioVert(entity, item, leek, cellFrom, cellTo);
+		}
+		if (entity == this.cRouge.id) {
+			prio = this.getPrioRouge(entity, item, leek, cellFrom, cellTo);
+		}
+		debug('prio : ' + prio);
+
+		return prio;
+	}
+	
+	getPrioBleu(integer entity, Item item, Leek leek, integer cellFrom, integer cellTo) {
+		if (!this.pathBleu) return 0;
+		if (this.cBleu.cell == this.destBleu) return 0;
+		if (!inArray(this.pathBleu, cellTo)) return 0;
+		return 100000 - getPathLength(cellTo, this.destBleu) * 10;
+	}
+	getPrioRouge(integer entity, Item item, Leek leek, integer cellFrom, integer cellTo) {
+		if (!this.pathRouge) return 0;
+		if (this.cRouge.cell == this.destRouge) return 0;
+		if (!inArray(this.pathRouge, cellTo)) return 0;
+		return 100000 - getPathLength(cellTo, this.destRouge) * 10;
+	}
+	getPrioVert(integer entity, Item item, Leek leek, integer cellFrom, integer cellTo) {
+		if (!this.pathVert) return 0;
+		if (this.cVert.cell == this.destVert) return 0;
+		if (!inArray(this.pathVert, cellTo)) return 0;
+		return 100000 - getPathLength(cellTo, this.destVert) * 10;
+	}
+	getPrioJaune(integer entity, Item item, Leek leek, integer cellFrom, integer cellTo) {
+		if (!this.pathJaune) return 0;
+		if (this.cJaune.cell == this.destJaune) return 0;
+		if (!inArray(this.pathJaune, cellTo)) return 0;
+		return 100000 - getPathLength(cellTo, this.destJaune) * 10;
+	}
+	
+	getCellsTargets() {
+		Array<integer> res = [];
+		this.pathBleu = [];
+		this.pathRouge = [];
+		this.pathJaune = [];
+		this.pathVert = [];
+		if (this.cBleu.cell != this.destBleu && isEmpty(this.pathBleu)) {
+			this.pathBleu = Carte.getLinePath(this.cBleu.cell, this.destBleu);
+		}
+		
+		if (this.cRouge.cell != this.destRouge && isEmpty(this.pathRouge)) {
+			this.pathRouge = Carte.getLinePath(this.cRouge.cell, this.destRouge);
+		}
+		
+		if (this.cJaune.cell != this.destJaune && isEmpty(this.pathJaune)) {
+			this.pathJaune = Carte.getLinePath(this.cJaune.cell, this.destJaune);
+		}
+		
+		if (this.cVert.cell != this.destVert && isEmpty(this.pathVert)) {
+			this.pathVert = Carte.getLinePath(this.cVert.cell, this.destVert);
+		}
+		
+		if (this.pathBleu) res = arrayConcat(res, this.pathBleu);
+		if (this.pathRouge) res = arrayConcat(res, this.pathRouge);
+		if (this.pathJaune) res = arrayConcat(res, this.pathJaune);
+		if (this.pathVert) res = arrayConcat(res, this.pathVert);
+		res = arrayUnique(res);
+		
+		//mark(res, COLOR_GREEN,1);
+		return res;
+	}
+	getCellsTargetsInversion() {
+		Array<integer> res = [];
+		Array cristaux = [
+			this.cBleu.id,
+			this.cRouge.id,
+			this.cJaune.id,
+			this.cVert.id,
+			this.graal.id,
+		];
+		for (Leek entity in Cache.leeks) {
+			if (!entity.ally && isAlive(entity.id) && !inArray(cristaux, entity.id)) {
+				push(res, entity.cell);
+			}
+		}
+		return res;
+	}
+	TpNearGrall() {
+		if (isSummon()) return;
+		if (getCellY(Cache.leeks[getEntity()].cell) < -2) return;
+		if (getCooldown(CHIP_TELEPORTATION) == 0 && mapContainsKey(Cache.chipsPlacment, CHIP_TELEPORTATION) && getTurn() >= 2) {
+				Map<integer,integer> cells = Carte.areaLeek(getCell(), 12);
+				integer tmpDist = 99;
+				integer distFromGraal;
+				integer cellToTp;
+				for (var cell : var dist in cells) {
+						distFromGraal = getCellDistance(cell, this.graal.cell);
+						if (distFromGraal < tmpDist && isEmptyCell(cell)) {
+								tmpDist = distFromGraal;
+								cellToTp = cell;
+						}
+				}
+				if (cellToTp == 384) {
+						cellToTp = 381;
+				}
+				if (cellToTp == 7 || cellToTp == 6) {
+						cellToTp = 112;
+				}
+				useChipOnCell(CHIP_TELEPORTATION, cellToTp);
+		}
+	}
+}

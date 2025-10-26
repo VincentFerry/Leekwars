@@ -1,0 +1,455 @@
+class Leek {
+    integer id
+    string name
+    integer strength
+    real life
+    integer magic
+    integer resistance
+    real absoluteShield
+    //real preventAbsoluteShield
+    real relativeShield
+    //real preventRelativeShield
+    integer wisdom
+    integer agility
+    integer science
+	integer frequency
+    real tp
+    integer mp
+    integer totalLife
+    integer|null cell
+	Array effects
+    Weapon|null weapon
+    real damageReturn
+	real power
+	boolean ally
+	Array<Action> actions = []
+	Array<Action> initActions = []
+	Map<integer, integer> cellAccess = [:]
+	Map<integer, integer> cellAccessBase = [:]
+	Map<integer, integer|real>? mapDanger
+	Map<integer, boolean>? chipsCooldown
+	boolean needShield = false //On a toujours besoin de shield contre les chatiments et pour les utiliser, et pour utiliser plasma aussi
+	integer type
+	Array<integer> weapons
+	Array<integer> chips
+	Map<integer,integer> itemMaxUse = [:]
+	integer? passiveDamge = null;
+	states
+	invulne
+	Array<integer> allies
+	integer? turnOrder
+	Map<integer,Array<Action>> combos = [:] // 0 = général, other leekId enemy
+	
+    constructor(id) {
+        this.id = id;
+        this.name = getName(id);
+		this.strength = getStrength(id); 
+		this.life = getLife(id); 
+		this.magic = getMagic(id); 
+		this.resistance = getResistance(id);
+		this.absoluteShield = getAbsoluteShield(id); 
+		this.relativeShield = getRelativeShield(id);
+		this.wisdom = getWisdom(id); 
+		this.agility = getAgility(id);
+		this.science = getScience(id); 
+		//this.frequency = getFrequency(id); 
+		this.tp = getTP(id); 
+		this.mp = getMP(id); 
+		this.totalLife = getTotalLife(id);
+		this.cell = getCell(id);
+		this.effects = getEffects(id);
+		this.power = getPower(id);
+		this.weapon = getWeapon(id) ? new Weapon(getWeapon(id)) : null;
+		this.damageReturn = getDamageReturn(id);
+		this.allies = isAlly(this.id) ? getAliveAllies() : getAliveEnemies();
+		this.ally = isAlly(id);
+		this.type = getType(id);
+		this.chips = getChips(id);
+		this.weapons = getWeapons(id);
+		this.invulne = STATE_INVINCIBLE in getStates(id);
+		this.turnOrder = getEntityTurnOrder(id);
+		//this.getMyChips();
+		if (this.life > 0 && this.ally) {
+			this.getChipsCooldown();
+			if (this.type != ENTITY_BULB) {
+				this.getNeedShield();
+			}
+			for (integer itemId in arrayConcat(this.weapons, this.chips)) {
+				itemMaxUse[itemId] = getItemUses(itemId);
+			}
+		}
+    }
+	
+	Map<integer, integer> getCellAccess() {
+		if (Cache.forceNoMove) {
+			this.mp = 0;
+			this.cellAccess = [0:this.cell];
+		}
+		if (!this.cellAccess) {
+			if (isStatic(this.id)) {
+				this.mp = 0;
+			}
+			this.cellAccessBase = Carte.getCellulesAccessibles(this.cell, this.mp);
+			this.cellAccess = Carte.cellAccessJump(this);
+		}
+		
+		return this.cellAccess
+	}
+	Map<integer, integer> getCellAccessBase() {
+		if (!this.cellAccessBase) {
+			this.cellAccessBase = Carte.getCellulesAccessibles(this.cell, this.mp);
+		}
+		return this.cellAccessBase;
+	}
+	
+	string getName() {
+        if (!this.name) {
+            this.name = getName(this.id);
+        }
+        return this.name;
+    }
+    
+    integer getResistance() {
+        if (!this.resistance) {
+            this.resistance = getResistance(this.id);
+        }
+        return this.resistance;
+    }
+    
+    integer getWisdom() {
+        if (!this.wisdom) {
+            this.wisdom = getWisdom(this.id);
+        }
+        return this.wisdom;
+    }
+    
+    integer getAgility() {
+        if (!this.agility) {
+            this.agility = getAgility(this.id);
+        }
+        return this.agility;
+    }
+    
+    integer getScience() {
+        if (!this.science) {
+            this.science = getScience(this.id);
+        }
+        return this.science;
+    }
+    
+    integer getFrequency() {
+        if (!this.frequency) {
+            this.frequency = getFrequency(this.id);
+        }
+        return this.frequency;
+    }
+    
+    integer getMP() {
+        if (!this.mp) {
+            this.mp = getMP(this.id);
+        }
+        return this.mp;
+    }
+    
+    integer getTotalLife() {
+        if (!this.totalLife) {
+            this.totalLife = getTotalLife(this.id);
+        }
+        return this.totalLife;
+    }
+    
+    integer? getCell() {
+        if (!this.cell) {
+            this.cell = getCell(this.id);
+        }
+        return this.cell;
+    }
+	
+	resetActions() {
+		Operations.startOp('Leek : resetActions');
+       	this.actions = clone(this.initActions);
+		Operations.stopOp('Leek : resetActions');
+	}
+	
+	Array<Action> getActions(Array<integer> items, Map cells) {
+		Operations.startOp('Leek : getActions');
+		items = arrayFilter(items, function(i) {
+			if (this.type == ENTITY_LEEK) {
+				return !inArray([WEAPON_ILLICIT_GRENADE_LAUNCHER, WEAPON_UNSTABLE_DESTROYER, CHIP_ADRENALINE, CHIP_JUMP, /*CHIP_INVERSION,*/ CHIP_TELEPORTATION], i);
+			} else {
+				return !inArray([CHIP_TELEPORTATION, CHIP_JUMP], i);
+			}
+		});
+		if (isSummon()) {
+			for (var item in items) {
+				debug(Cache.items[item].name);
+			}
+		}
+		
+		if (this.id == getEntity() && !Cache.forceNoMove) {
+			this.cellAccess = Carte.cellAccessJump(Cache.leeks[this.id]);
+		}
+		
+		Array<Action> actions = [];
+		
+		for (integer itemId in items) {
+			if (this.chipsCooldown[itemId]) continue;
+			if (itemId == CHIP_RESURRECTION) {
+				for (integer key : Leek leek in Cache.leeks) {
+					if (leek.type != ENTITY_LEEK || !leek.ally) continue;
+					if (isAlive(leek.id)) continue;
+					integer? cellToInvoc = Carte.getCellToInvoc(CHIP_RESURRECTION, this.cell, this.id);
+					if (cellToInvoc) {
+						Action action = new Action(this, Cache.items[itemId], this.cell, cellToInvoc);
+						push(actions, action);
+					}
+				}
+				continue;
+			}
+			Item item = Cache.items[itemId];
+			
+			Array cellsTarget = [];
+			if (item.mainTarget == 'enemy') {
+				if (Cache.boss == BOSS_FENNEL_KING && inArray([CHIP_BOXING_GLOVE, CHIP_GRAPPLE, CHIP_INVERSION], item.id)) {
+					cellsTarget = Cache.Fenouille.getCellsTargets();
+				} else {
+					cellsTarget = Carte.getAreaTarget(this.id, item.area, 'enemy');
+					if ((mapContainsKey(Cache.chipsPoison, item.id) || item.id == WEAPON_REVOKED_M_LASER)
+						&& Cache.leekIdPassifScience && Cache.leeks[Cache.leekIdPassifScience].cell) {
+						push(cellsTarget, Cache.leeks[Cache.leekIdPassifScience].cell);
+					}
+				}
+			} else if (item.mainTarget == 'ally') {
+				/*if (item.id == CHIP_PRISM) {
+					cellsTarget = [this.cell];
+				} else {*/
+					cellsTarget = Carte.getAreaTarget(this.id, item.area, 'ally');
+				//}
+			} else if (item.mainTarget == 'cellSummon')	{
+				var cellInvocBulb = Carte.getCellToInvoc(item.id, this.cell, this.id);
+				if (cellInvocBulb) {
+					var action = new Action(this, item, this.cell, cellInvocBulb);
+					push(actions, action);
+				}
+			} else if (item.mainTarget == 'both') {
+				cellsTarget = Carte.getAreaTarget(this.id, item.area, 'both');
+			} else {
+				debugW('pas de targets ? ' + item.name);
+			}
+
+			if (item.id == CHIP_BOXING_GLOVE) {
+				mark(cellsTarget, COLOR_GREEN, 1);
+			}
+			
+			if (isEmpty(cellsTarget)) continue;
+			Operations.startOp('Leek : Action item : ' + item.name);
+			for (integer cellFrom : integer mp in cells) {
+				for (integer cellTo in cellsTarget) {
+					if (this.itemMaxUse[item.id] == item.maxUse) continue;
+					if (!lineOfSight(cellFrom, cellTo) && item.needLos) continue;
+					if (getCellDistance(cellFrom, cellTo) > item.maxRange) continue;
+					if (getCellDistance(cellFrom, cellTo) < item.minRange) continue;
+					// prevent move
+					if (cellTo == Cache.leeks[this.id].cell && cellFrom != Cache.leeks[this.id].cell) continue;
+					if (item.launchType == LAUNCH_TYPE_LINE && !isOnSameLine(cellFrom, cellTo))	continue;
+					if (item.launchType == LAUNCH_TYPE_STAR) {
+						var cellFromX = getCellX(cellFrom);
+						var cellFromY = getCellY(cellFrom);
+						var cellToX = getCellX(cellTo);
+						var cellToY = getCellY(cellTo);
+						if (abs(cellFromX-cellToX) != abs(cellFromY-cellToY) && !isOnSameLine(cellFrom, cellTo)) {
+							continue;
+						}
+					}
+					
+					if (item.launchType == LAUNCH_TYPE_DIAGONAL) {
+						var cellFromX = getCellX(cellFrom);
+						var cellFromY = getCellY(cellFrom);
+						var cellToX = getCellX(cellTo);
+						var cellToY = getCellY(cellTo);
+						if (abs(cellFromX-cellToX) != abs(cellFromY-cellToY)) continue;
+					}
+					/*if (item.area == AREA_FIRST_INLINE && Carte.isEntityOnLine(cellFrom, cellTo, this.id)) {
+
+					}*/
+					
+					Action action = new Action(this, item, cellFrom, cellTo);
+					if (action.priority > 15) {
+						push(actions, action);
+					}
+				}
+			}
+			Operations.stopOp('Leek : Action item : ' + item.name);
+		}
+		Operations.stopOp('Leek : getActions');
+		actions = Action.sortActions(actions, this.id);
+		if (count(actions) > 800) {
+			debugW('truncate ' + count(actions) + ' actions to 800');
+			actions = arraySlice(actions, 0, 800);
+		}
+		
+		return actions;
+	}
+	
+	/*private*/ Map<integer, boolean> getChipsCooldown() {
+		Array chips = getChips(this.id);
+		Map<integer, boolean> res = [:];
+		for(integer chip in chips) {
+			res[chip] = getCooldown(chip) == 0 ? false : true;
+		}
+		this.chipsCooldown = res;
+	}
+	
+	private getNeedShield() {
+		if (Cache.isVulneEnemy) {
+			this.needShield = true;
+			return true;
+		}
+		Array<integer> enemies = getAliveEnemies(); // Cache.leeks pas dispo ici
+		
+		this.needShield = false;
+		for (integer enemy in enemies) {
+			if ((getStrength(enemy) > 300 || getPower(enemy) > 100) && !isSummon(enemy)) {
+				this.needShield = true;
+			}
+		}
+	}
+	
+	
+	static Array updateActions(integer key, Array<Action> actions, integer leekId) {
+		Array<integer> leeks = [];
+		Array<integer> leekIgnores = [];
+		for (Leek entity in Cache.leeks) {
+			if (entity.life > 0) {
+				push(leeks, entity.id);
+				push(leekIgnores, entity.cell);
+			}
+		}
+		
+		Cache.leeks[leekId].itemMaxUse[actions[key].item.id]++;
+
+		if (actions[key].item.is_weapon) {
+			if (Cache.leeks[leekId].weapon == null) {
+				Cache.leeks[leekId].tp -= 1;
+			} else if (Cache.leeks[leekId].weapon.id != actions[key].item.id) {
+				 Cache.leeks[leekId].tp -= 1;
+			}
+			Cache.leeks[leekId].weapon = actions[key].item;
+			// fix dégeulasse
+		} else if (actions[key].item.cooldown > 0 || actions[key].item.cooldown == -1) {
+			Cache.leeks[leekId].chipsCooldown[actions[key].item.id] = true;
+		}
+		
+		if (actions[key].item.id == CHIP_RESURRECTION) {
+			Cache.leeks[actions[key].entityToRes].totalLife = 0.25 * Cache.leeks[actions[key].entityToRes].totalLife;
+			Cache.leeks[actions[key].entityToRes].life = Cache.leeks[actions[key].entityToRes].totalLife / 2;
+			Cache.leeks[actions[key].entityToRes].cell = actions[key].cellTo;
+			Cache.leeks[leekId].cell = actions[key].cellFrom; // doesn't work ?
+		}
+		
+		/*if (mapContainsKey(Cache.chipsSummon, actions[key].item.id)) {
+			// marche pas non ?
+			Cache.leeks[leekId].cell = actions[key].cellFrom;
+		}*/
+		
+		Cache.leeks[leekId].tp -= actions[key].item.cost;
+		// hotfix degeu lié à Action.useAction
+		if (actions[key].cellFrom != actions[key].cellTo || actions[key].item.area != AREA_POINT) {
+			Cache.leeks[leekId].mp -= getPathLength(actions[key].cellFrom, Cache.leeks[leekId].cell, [Cache.leeks[leekId].cell]);
+			Cache.leeks[leekId].cell = actions[key].cellFrom;
+			if (!mapContainsKey(Cache.leeks[leekId].cellAccessBase, actions[key].cellFrom)) {
+				Cache.leeks[leekId].tp -= Cache.items[CHIP_JUMP].cost;
+				Cache.leeks[leekId].chipsCooldown[CHIP_JUMP] = true;
+			}
+			Cache.leeks[leekId].cellAccess = [:];
+			Cache.leeks[leekId].getCellAccess();
+		} 
+
+		if (actions[key].item.id == CHIP_INVERSION) {
+			Cache.leeks[leekId].cell = actions[key].cellTo;
+			Cache.leeks[actions[key].targets[0].leekId].cell = actions[key].cellFrom;
+			Cache.leeks[actions[key].targets[0].leekId].relativeShield -= 20;
+			Cache.cellsTargetsEnemies = [:];
+			Cache.cellsTargetsAllies = [:];
+		} else if (actions[key].item.id == CHIP_GRAPPLE || actions[key].item.id == CHIP_BOXING_GLOVE) {
+			Cache.leeks[actions[key].targets[0].leekId].cell = actions[key].cellTo;
+			Cache.leeks[leekId].cellAccess = [:];
+			Cache.leeks[leekId].getCellAccess();
+			Cache.leeks[leekId].actions = Cache.leeks[leekId].getActions(arrayConcat(Cache.leeks[leekId].weapons, Cache.leeks[leekId].chips), Cache.leeks[leekId].getCellAccess());
+			return Cache.leeks[leekId].actions;
+		}
+
+		for (Target target in actions[key].targets) {
+			if (mapContainsKey(Cache.chipsPlacment, actions[key].item.id)) {
+				Cache.leeks[target.leekId].cell = actions[key].cellTo;
+			}
+			if (actions[key].item.id == CHIP_LIBERATION) {
+				Cache.leeks[target.leekId].absoluteShield = Cache.leeks[target.leekId].absoluteShield * 0.4;
+				Cache.leeks[target.leekId].relativeShield = Cache.leeks[target.leekId].relativeShield * 0.4;
+				Cache.leeks[target.leekId].damageReturn = Cache.leeks[target.leekId].damageReturn * 0.4;
+			} else if (actions[key].item.id == CHIP_TRANQUILIZER) {
+				push(Cache.leeks[target.leekId].effects, [EFFECT_SHACKLE_TP, target.value, leekId, 1, 0, CHIP_TRANQUILIZER, target.leekId, 0]);
+			}
+			
+			// update stats
+			if (mapContainsKey(Cache.effectStatsLinks, target.effectId)) {
+				if (Cache.effectStatsLinks[target.effectId].operator == '+') {
+					if (actions[key].item.id != CHIP_SERUM && actions[key].item.id != CHIP_VACCINE)
+						Cache.leeks[target.leekId][Cache.effectStatsLinks[target.effectId].stats] += round(target.value);
+					if (target.effectId == EFFECT_DAMAGE) {
+						Cache.leeks[leekId].life += target.value * Cache.leeks[leekId].wisdom / 1000;
+					}
+				} else {
+					Cache.leeks[target.leekId][Cache.effectStatsLinks[target.effectId].stats] -= round(target.value);
+				}
+			}
+
+			// Réduit le nombre d'opérations.
+			//if (mapContainsKey(Cache.chipsBoost, actions[key].item.id)) return actions;
+			// Moving out of targets boucle
+			/*for (Action leekAction in actions) {
+				for (Target TargetAction in leekAction.targets) {
+					if (TargetAction.leekId == target.leekId) {
+						leekAction.getPriority();
+						break;
+					}
+				}
+			}*/ 
+		}
+		
+		// need update properly liberation effects
+		// should be update prio for libé and not getActions ! will fix opérations limit
+		if ((mapContainsKey(Cache.chipsNeedUpdateActions, actions[key].item.id) || mapContainsKey(Cache.chipsSummon, actions[key].item.id))) {
+			Cache.leeks[leekId].cellAccess = [:];
+			Cache.leeks[leekId].getCellAccess();
+			Cache.leeks[leekId].actions = Cache.leeks[leekId].getActions(arrayConcat(Cache.leeks[leekId].weapons, Cache.leeks[leekId].chips), Cache.leeks[leekId].getCellAccess());
+		} 
+		// don't know if we really need this sort.
+		else {
+			for (Action leekAction in Cache.leeks[leekId].actions) {
+				leekAction.getPriority();
+			}
+			actions = Action.sortActions(actions, leekId);	
+		}
+		return Cache.leeks[leekId].actions;
+	}
+	
+	private boolean isInTheSameTeam(integer leekId) {
+		return inArray(this.allies, leekId);
+	}
+	
+	/* @todo prendre en compte serum et vaccin qui sont avant les passifs degats : leekwars.com/fight/44414645?action=636 */
+	public integer getPassiveDamage() {
+		integer res = 0;
+		for (Array<integer> effect in this.effects) {
+			if (effect[0] == EFFECT_POISON || effect[0] == EFFECT_AFTEREFFECT) {
+				res += effect[1];
+			}
+			if (effect[0] == EFFECT_HEAL) {
+				res -= effect[1];
+			}
+		}
+		this.passiveDamge = res < 0 ? 0 : res;
+		return this.passiveDamge;
+	}
+}

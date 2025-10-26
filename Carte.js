@@ -1,0 +1,886 @@
+class Carte {
+	static Map areaMultiplicator = [0:1, 1:0.8, 2:0.6, 3:0.4, 4:0.2];
+	static Map<integer,boolean> obstacles = [:];
+
+	static Map<integer, integer> getCellulesAccessibles(integer cellIni, integer mp) {
+		if (mp <= 0) return [cellIni : 0];
+	   integer x ;
+	   integer y ;
+	   Map<integer, integer> res = new Map() as Map<integer, integer>;
+	   Map<integer, integer> res2 = new Map() as Map<integer, integer>;
+	   integer cpt = 0;
+	   Map<integer, integer> temp = new Map() as Map<integer, integer>;
+	   Map<integer, integer> temp2 = new Map() as Map<integer, integer>;
+	   integer|null cellToTest;
+	   res[cellIni] = 0;
+	   while(cpt!=mp){
+		   if (cpt==0) {
+				temp[cellIni]=0;
+		   } else {
+			temp = temp2;
+			temp2 = new Map() as Map<integer, integer>;
+		   }
+		for (var key : var ele in temp) {
+			x = getCellX(key);
+			y = getCellY(key);
+			cellToTest=getCellFromXY(x+1,y);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(Carte.isEmptyCell(cellToTest)){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}
+			}
+			cellToTest=getCellFromXY(x, y+1);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(Carte.isEmptyCell(cellToTest)){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}     
+			}
+			cellToTest=getCellFromXY(x-1, y);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(Carte.isEmptyCell(cellToTest)){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}       
+			}
+			cellToTest=getCellFromXY(x, y-1);
+			if(cellToTest!=null && res[cellToTest]==null){
+				if(Carte.isEmptyCell(cellToTest)){
+					res[cellToTest]=cpt+1;
+					temp2[cellToTest]=cpt+1;
+				}     
+			}
+		}
+		cpt++;
+	   }		
+	   	return res;
+	}
+	
+	static Array<integer> getAreaTarget(integer me, integer area, string catTargets) {
+		Array res = [];
+		integer x;
+		integer y;
+		integer|null cellToTest;
+		Array <integer> leeksId = [];
+		if (catTargets == 'both') {
+			if (Cache.cellsTargetsEnemies[area]) return Cache.cellsTargetsEnemies[area];
+			for (Leek entity in Cache.leeks) {
+				if (entity.life > 0) {
+					push(leeksId, entity.id);
+				}
+			}
+		} else	if (catTargets == 'enemy') {
+			if (Cache.cellsTargetsEnemies[area]) return Cache.cellsTargetsEnemies[area];
+			leeksId = Action.getEnemiesTarget(me); // déjà en cache
+			leeksId = arrayFilter(leeksId, function(l) {
+				return Cache.leeks[l].life > 0 /*&& Cache.leeks[l].life > Cache.leeks[l].getPassiveDamage()*/;
+			});
+		} else if (catTargets == 'ally') {
+			if (Cache.cellsTargetsAllies[area]) return Cache.cellsTargetsAllies[area];
+			// can't use getAliveAllies because i need my ressurect leek
+			for (Leek entity in Cache.leeks) {
+				if (entity.ally && entity.life > 0) {
+					push(leeksId, entity.id);
+				}
+			}
+		}
+		
+		if (area == AREA_POINT || area == AREA_LASER_LINE) {
+			for (integer leekId in leeksId) {
+				push(res, Cache.leeks[leekId].cell);
+			}
+		} else if (area == AREA_X_1) {
+			for (integer leekId in leeksId) {
+				x = getCellX(Cache.leeks[leekId].cell);
+				y = getCellY(Cache.leeks[leekId].cell);
+				cellToTest = getCellFromXY(x-1, y-1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+1, y+1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x-1, y+1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+1, y-1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				push(res, Cache.leeks[leekId].cell);
+			}
+			res = arrayFilter(res, function(a) {
+				return a != null;
+			});
+		} else if (area == AREA_X_2) {
+			for (integer leekId in leeksId) {
+				x = getCellX(Cache.leeks[leekId].cell);
+				y = getCellY(Cache.leeks[leekId].cell);
+				cellToTest = getCellFromXY(x-1, y-1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+1, y+1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x-1, y+1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+1, y-1);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x-2, y-2);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+2, y+2);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x-2, y+2);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				cellToTest = getCellFromXY(x+2, y-2);
+				if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				push(res, Cache.leeks[leekId].cell);
+			}
+			res = arrayFilter(res, function(a) {
+				return a != null;
+			});
+		} /*else if (area == AREA_CIRCLE_1) { // area 1 useless
+			for (integer leekId in leeksId) {
+				push(res, Cache.leeks[leekId].cell);
+				for (integer cell : var osef in Cache.areaCell1[Cache.leeks[leekId].cell]) {
+					push(res, cell);
+				}
+			}
+		}*/ else if (area == AREA_FIRST_INLINE) {
+			for (integer leekId in leeksId) {
+				x = getCellX(Cache.leeks[leekId].cell);
+				y = getCellY(Cache.leeks[leekId].cell);
+				for (var x1 = x ; x1 < x+8 ; x1 ++) {
+					cellToTest = getCellFromXY(x1, y);
+					if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				}
+				for (var x2 = x ; x2 > x-8 ; x2 --) {
+					cellToTest = getCellFromXY(x2, y);
+					if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				}
+				for (var y1 = y ; y1 < y+8 ; y1 ++) {
+					cellToTest = getCellFromXY(x, y1);
+					if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				}
+				for (var y2 = y ; y2 > y-8 ; y2 --) {
+					cellToTest = getCellFromXY(x, y2);
+					if (Carte.isEmptyCell(cellToTest)) push(res, cellToTest);
+				}
+			}
+			//mark(res, COLOR_BLUE, 1);
+			return res; // No cache for mouvement 
+		} else { // On gère moins d'aoe mais on gagne énormément d'opérations !!
+			/*for (integer leekId in leeksId) {
+				push(res, Cache.leeks[leekId].cell);
+				for (integer cell : var osef in Cache.areaCell1[Cache.leeks[leekId].cell]) {
+					push(res, cell);
+				}
+			}*/
+			for (integer leekId in leeksId) {
+				push(res, Cache.leeks[leekId].cell);
+			}
+		}
+		if (catTargets == 'enemy') {
+			Cache.cellsTargetsEnemies[area] = res;
+		} else if (catTargets == 'ally'){
+			Cache.cellsTargetsAllies[area] = res;
+		}
+		
+		return res;
+	}
+	
+	static integer getClosestEnemy(Leek leek) {
+		integer res;
+		integer dist = 9999;
+		Array<integer> enemies = getAliveEnemies();
+		for (var enemy in enemies) {
+			if (!isSummon(enemy)) {
+				var dist_tmp = getCellDistance(getCell(), getCell(enemy));
+				if (dist_tmp < dist) {
+					res = enemy;
+					dist = dist_tmp;
+				}
+			}
+		}
+		return res;
+	}
+	
+	static Map<integer,integer> areaLeek(integer cellIni, integer nb) {
+		integer x;
+		integer y;
+		Map res = [:];
+		integer cpt = 0;
+		Map temp = [:];
+		integer|null cellToTest;
+
+		while (cpt != nb) {
+			if (cpt == 0) {
+				temp[cellIni] = 0;
+			} else {
+				temp = clone(res);
+			}
+
+			for (integer key : integer|string ele in temp) {
+				x = getCellX(key);
+				y = getCellY(key);
+
+				cellToTest = getCellFromXY(x + 1, y);
+				Carte.updateRes(cellToTest, res, cpt);
+
+				cellToTest = getCellFromXY(x, y + 1);
+				Carte.updateRes(cellToTest, res, cpt);
+
+				cellToTest = getCellFromXY(x - 1, y);
+				Carte.updateRes(cellToTest, res, cpt);
+
+				cellToTest = getCellFromXY(x, y - 1);
+				Carte.updateRes(cellToTest, res, cpt);
+			}
+
+			cpt++;
+		}
+		res = mapFilter(res, function(valeur) {
+			return valeur != '';
+		});
+
+		return res;
+	}
+
+	static updateRes(cellToTest, res, cpt) {
+		if (cellToTest && !res[cellToTest]) {
+			if (getCellContent(cellToTest) != CELL_OBSTACLE) {
+				res[cellToTest] = cpt + 1;
+			} else {
+				res[cellToTest] = '';
+			}
+		}
+	}
+	
+	static integer? getCellToInvoc(integer chip, integer cellFrom, integer leekId) {
+		/* @todo si mapRange <= a mes mp alors utiliser cellsAccess puis réduire à la range pour les opé sinon on appelle la fonction */
+		/* @todo invoc sur la cellule la plus loin du middle enemies */
+		var cellsToInvoc = Carte.getCellulesAccessibles(cellFrom, Cache.items[chip].maxRange);
+		for (var cell : var dist in cellsToInvoc) {
+			if (getCellDistance(cell, cellFrom) > Cache.items[chip].maxRange) {
+				continue;
+			}
+			if (getCellDistance(cell, cellFrom) < Cache.items[chip].minRange) {
+				continue;
+			}
+			if (!lineOfSight(cell, cellFrom) && Cache.items[chip].needLos) {
+				continue;
+			}
+			return cell;
+		}
+		return null;
+	}
+	
+	static Array<integer> groupCellAccessEnemies()
+	{
+		var res = [];
+		for (Leek entity in Cache.leeks) {
+			if (entity.life>0 && !entity.ally && (entity.strength >= 300 || entity.magic >= 300)) {
+				push(res, mapKeys(entity.getCellAccess()));
+			}
+		}
+		res = arrayFlatten(res);
+		res = arrayUnique(res);
+		return res;
+	}
+	
+	static calculateTeamCenter(string team) {
+		if (Cache.teamCenter && team == 'ally') return Cache.teamCenter;
+		if (Cache.enemyCenter && team == 'enemy') return Cache.enemyCenter;
+		Array leeks = [];
+		for(Leek leek in Cache.leeks) {
+			if (leek.ally && leek.life > 0 && team == 'ally' && leek.type != ENTITY_BULB) {
+				push(leeks, leek.id);
+			}
+			if (!leek.ally && leek.life > 0 && team == 'enemy' && leek.type != ENTITY_BULB) {
+				push(leeks, leek.id);
+			}
+		}
+		var totalX = 0;
+		var totalY = 0;
+
+		// Calculer les coordonnées moyennes
+		for (var leek in leeks) {
+			var leekX = getCellX(Cache.leeks[leek].cell);
+			var leekY = getCellY(Cache.leeks[leek].cell);
+
+			totalX += leekX;
+			totalY += leekY;
+		}
+
+		// Calculer les coordonnées moyennes
+		var centerX = totalX / count(leeks);
+		var centerY = totalY / count(leeks);
+
+		// Résultat
+		if (team == 'ally') {
+			Cache.teamCenter = getCellFromXY(centerX, centerY);
+			return Cache.teamCenter;
+		}
+		if (team == 'enemy') {
+			Cache.enemyCenter = getCellFromXY(centerX, centerY);
+			return Cache.enemyCenter;
+		}
+	}
+	
+	static Array<integer>? getLinePath(integer cellFrom, integer cellTo) {
+		if (cellFrom == cellTo) return null;
+		integer xFrom = getCellX(cellFrom);
+		integer yFrom = getCellY(cellFrom);
+		integer xTo = getCellX(cellTo);
+		integer yTo = getCellY(cellTo);
+		integer? oneCroisement = getCellFromXY(xFrom, yTo);
+		integer? twoCroisement = getCellFromXY(xTo, yFrom);
+		
+		Array<integer>? one_one_path = getPath(cellFrom, oneCroisement);
+		Array<integer>? one_two_path = getPath(oneCroisement, cellTo);
+		Array<integer>? second_one_path = getPath(cellFrom, twoCroisement);
+		Array<integer>? second_two_path = getPath(twoCroisement, cellTo);
+		one_one_path = one_one_path == null ? [] : one_one_path;
+		one_two_path = one_two_path == null ? [] : one_two_path;
+		second_one_path = second_one_path == null ? [] : second_one_path;
+		second_two_path = second_two_path == null ? [] : second_two_path;
+		if (oneCroisement && one_one_path && one_two_path && count(one_one_path) == getCellDistance(cellFrom, oneCroisement) && count(one_two_path) == getCellDistance(oneCroisement, cellTo)) {			
+			return arrayConcat(one_one_path, one_two_path);
+		} else if (twoCroisement && second_one_path && second_two_path && count(second_one_path) == getCellDistance(cellFrom, twoCroisement) && count(second_two_path) == getCellDistance(twoCroisement, cellTo)) {
+			return arrayConcat(one_one_path, one_two_path);
+		} else {
+			return getPath(cellFrom, cellTo);
+		}
+	}
+	
+	static Array<integer> getCellToJump() {
+		Operations.startOp('Carte : getCellToJump');
+		Array<integer> obstacles = getObstacles();
+		integer myId = getEntity();
+		/*for (Leek entity in Cache.leeks) {
+			if (entity.id == myId || entity.cell == null) continue;
+			push(obstacles, entity.cell);
+		}*/
+		Array<integer> res = [];
+		integer? cellToTest;
+		var x;
+		var y;
+		for (integer cell in obstacles) {
+			y = getCellY(cell);
+			x = getCellX(cell);
+			cellToTest = getCellFromXY(x + 1, y);
+			if (cellToTest && getCellContent(cellToTest) != CELL_OBSTACLE) {
+				push(res, cellToTest);
+			}
+			cellToTest = getCellFromXY(x - 1, y);
+			if (cellToTest && getCellContent(cellToTest) != CELL_OBSTACLE) {
+				push(res, cellToTest);
+			}
+			cellToTest = getCellFromXY(x, y - 1);
+			if (cellToTest && getCellContent(cellToTest) != CELL_OBSTACLE) {
+				push(res, cellToTest);
+			}
+			cellToTest = getCellFromXY(x, y + 1);
+			if (cellToTest && getCellContent(cellToTest) != CELL_OBSTACLE) {
+				push(res, cellToTest);
+			}
+		}
+		res = arrayUnique(res);
+		Operations.stopOp('Carte : getCellToJump');
+		return res;
+	}
+	
+	/** Renvoi bien toutes les cellules mais coute trop d'opérations ... */
+	/*static Map<integer, integer> cellAccessJump(Leek leek){
+		Operations.startOp('Carte : cellAccessJump');
+		// juste pour la finale du tournoi par équipe.
+		if (!Cache.leeks[leek.id].chipsCooldown || Cache.leeks[leek.id].chipsCooldown[CHIP_JUMP] == true || !inArray(Cache.leeks[leek.id].chips, CHIP_JUMP)) {
+			return Cache.leeks[leek.id].cellAccessBase;
+		}
+		
+		integer MP = Cache.leeks[leek.id].mp;
+		integer fromCell = Cache.leeks[leek.id].cell;
+		Map<integer, integer> cellAccess = Carte.getCellulesAccessibles(fromCell, MP);
+		Array<integer> cellsToJump = [];
+		for (integer cell in Cache.cellsToJump) {
+			if (Carte.isEmptyCell(cell) && mapContainsKey(cellAccess, cell)) {
+				push(cellsToJump, cell);
+			}
+		}
+
+		Map<integer, integer> res = clone(cellAccess);
+		Map<integer, integer> tempAccess;
+		for (integer cell : integer mp in cellAccess) {
+			if (!inArray(cellsToJump, cell)) continue;
+			for (integer cellule : integer dist in Cache.areaCell3[cell]) {
+				tempAccess = Carte.getCellulesAccessibles(cellule, MP-mp);
+				for (integer c : integer d in tempAccess) {
+					if (!mapContainsKey(res, c) && Carte.isEmptyCell(c)) {
+						res[c] = cell;
+					}
+				}
+				if (!mapContainsKey(res, cellule) && Carte.isEmptyCell(cellule)) {
+					res[cellule] = cell;
+				}
+			}
+		}
+		Operations.stopOp('Carte : cellAccessJump');
+		return res;
+	}*/
+	/* Ne renvoi pas toutes les cellules mais c'est low cost */
+	static Map<integer, integer> cellAccessJump(Leek leek) {
+		Operations.startOp('Carte : cellAccessJump');
+		// Vérification des conditions pour utiliser la puce de saut
+		if (!Cache.leeks[leek.id].chipsCooldown || Cache.leeks[leek.id].chipsCooldown[CHIP_JUMP] == true || !inArray(Cache.leeks[leek.id].chips, CHIP_JUMP)) {
+			return leek.cellAccessBase;
+		}
+		
+		integer MP = Cache.leeks[leek.id].mp;
+		integer fromCell = Cache.leeks[leek.id].cell;
+
+		// Calcul des cellules accessibles de manière traditionnelle
+		Map<integer, integer> cellAccess = Carte.getCellulesAccessibles(fromCell, MP);
+		Map<integer, integer> res = clone(cellAccess);
+
+		for (var cell : var dist in cellAccess) {
+			for (integer cellule : var area in Cache.areaCell3[cell]) {
+				if (!mapContainsKey(res, cellule) && Carte.isEmptyCell(cellule)) {
+					res[cellule] = cell; // cell d'où on lance le saut
+				}
+			}
+		}
+
+		Operations.stopOp('Carte : cellAccessJump');
+		return res;
+	}
+	
+	static Map<integer,integer> cellAccessTp(integer fromCell, integer mp) {
+		Map<integer, integer> cellAccess = Carte.getCellulesAccessibles(fromCell, mp);
+		Map<integer,integer> res = clone(cellAccess);
+		integer distance;
+		integer maxDist = Cache.items[CHIP_TELEPORTATION].maxRange + mp;
+		
+		for (integer cell = 0; cell < 613; cell++) {
+			for (integer myCell : integer dist in cellAccess) {
+				if (getCellDistance(cell, fromCell) > maxDist) break;
+				if (myCell == cell) {
+					res[cell] = dist;
+					break;
+				}
+				if (getCellDistance(cell, myCell) <= Cache.items[CHIP_TELEPORTATION].maxRange) {
+					res[cell] = myCell;
+					break;
+				}
+			}
+		}
+		return res;
+	}
+	
+	// entityToIgnore to add
+	static boolean isEmptyCell(integer? cell) {
+		if (!cell) return false;
+		if (getCellContent(cell) == CELL_OBSTACLE) return false;
+		for (Leek entity in Cache.leeks) {
+			if (cell == entity.cell && entity.life > 0) return false;
+		}
+		return true;
+	}
+	
+	static integer getEntityOnCell(cell) {
+		for (Leek entity in Cache.leeks) {
+			if (entity.cell == cell && entity.life > 0) return entity.id;
+		}
+		return -1;
+	}
+	
+	/* Retourne simplement la cellule la plus proche du centre de la team
+	 * Mode économie d'opérations pour plus de stats d'items
+	 **/
+	static integer getCellNearAlly(integer leekId) {
+		Operations.startOp('Carte : getCellNearAlly');
+		Map<integer,integer> cellAccess = Carte.getCellulesAccessibles(getCell(leekId), getMP(leekId));
+		integer cellule;
+		integer? distance;
+		integer mp = getMP(leekId);
+		integer cellToGo = Carte.calculateTeamCenter('ally');
+		mark(cellToGo, COLOR_BLUE);
+		boolean emptyCell = getCellContent(cellToGo) == CELL_EMPTY;
+		integer bestCell = Cache.leeks[leekId].cell;
+		/*integer minDanger;
+		if (mapContainsKey(Cache.safeMap, Cache.leeks[leekId].cell)) {
+			minDanger = Cache.safeMap[Cache.leeks[leekId].cell];
+		} else {
+			minDanger = 200;
+		}*/
+        
+        //integer minDistance = getCellDistance(Cache.leeks[leekId].cell, cellToGo);
+        integer minDistance = 99;
+		for (integer cell : integer dist in cellAccess) {
+			//integer danger = Cache.safeMap[cell];
+			if (mp <= 6 && emptyCell) {
+				distance = getPathLength(cell, cellToGo);
+			} else {
+				distance = getCellDistance(cell, cellToGo);
+			}
+			// can reduce when i have jump ?
+			if (distance && distance <= minDistance/* && (danger <= minDanger + 10 || Cache.turn == 1 )*/) {
+				minDistance = distance;
+				cellule = cell;
+			}
+		}
+		debug('safe cell : ' + cellule);
+		debug('center allies : ' + cellToGo);
+		Operations.startOp('Carte : getCellNearAlly');
+		return cellule;
+	}
+	
+	/* @todo comment faire en mode solo ou battle royale avec 5M d'opé ?
+	 * Crée la safeMap au fur et à mesure quand on teste la cellule ? */
+	/*static safeMap() {
+		Operations.startOp('Carte : safeMap');
+		Map<integer,integer> safeMap = [:];
+		integer maxDistanceForSafeMap = 12;
+		Array allLeeks = arrayConcat(getAllies(), getEnemies());
+		for (integer cell = 0; cell < 613; cell++) {
+			if (mapContainsKey(Carte.obstacles, cell)) continue;
+			safeMap[cell] = 0;
+			for (integer cell2 = 0; cell2 < 613; cell2++) {
+				if (mapContainsKey(Carte.obstacles, cell2)) continue;
+				if (getCellDistance(cell, cell2) < maxDistanceForSafeMap) {
+					if (lineOfSight(cell, cell2, allLeeks)) {
+						safeMap[cell]++;
+					}
+				}
+			}
+		}
+		
+		Cache.safeMap = safeMap;
+		sendAll(MESSAGE_MOVE_TOWARD_CELL, Cache.safeMap);
+		
+		// voir visuellement ce que ça donne
+		/*integer minDanger = 999;
+		for (integer cell : integer danger in mapValues(safeMap)) {
+			if (danger < minDanger) {
+				minDanger = danger;
+			}
+		}
+		integer maxDanger = 0;
+		for (integer cell : integer danger in mapValues(safeMap)) {
+			if (danger > maxDanger) {
+				maxDanger = danger;
+			}
+		}
+
+		// Colorer les cellules en fonction du danger
+		for (integer cell : integer danger in safeMap) {
+			integer color = Carte.interpolateColor(danger, minDanger, maxDanger);
+			mark(cell, color, 64);
+			markText(cell, danger, 64);
+		}
+		pause();
+		Operations.stopOp('Carte : safeMap');
+	}*/
+
+	
+	// Fonction pour interpoler les couleurs
+	static integer interpolateColor(integer value, integer min, integer max) {
+		real ratio = (value - min) / (max - min);
+		integer red, green;
+
+		if (ratio < 0.5) {
+			// Interpolation du vert au jaune
+			ratio *= 2;
+			red = 255 * ratio;
+			green = 255;
+		} else {
+			// Interpolation du jaune au rouge
+			ratio = (ratio - 0.5) * 2;
+			red = 255;
+			green = 255 * (1 - ratio);
+		}
+
+		return (red << 16) + (green << 8);
+	}
+	
+	/**
+	 * @param leek ( normalement getEntity())
+	 * @return array [cell] = danger
+	 * Danger de 1 à 7 ou 1 est le plus faible
+	 */
+	static Map<integer, integer> lightSafeMap(integer leekId) {
+		Operations.startOp('Carte : light safeMap');
+		Leek leek = Cache.leeks[leekId];
+		Array<integer> leeks = [];
+		for (Leek entity in Cache.leeks) {
+			push(leeks, entity.id);
+		}
+		Array<integer> leekIgnores;
+		for (integer entity in leeks) {
+			push(leekIgnores, getCell(entity));
+		}
+		var tabAtt = Carte.groupCellAccessEnemies();
+		
+		Map<integer,integer> res = [:];
+		Map<integer,integer> temp = [:];
+		var maxRange = 12; // config
+		var cellAccess = leek.getCellAccess();
+		
+		for(var cellDef : var dist in cellAccess) {
+			temp = [:];
+			var area1 = areaLeek(cellDef, 1);
+			for(var cellAtt in tabAtt) {
+				if(isOnSameLine(cellDef, cellAtt) && lineOfSight(cellDef, cellAtt, leekIgnores) && getCellDistance(cellDef, cellAtt) <= 12 ){
+					temp[cellDef] = 7; 
+				}else if (getCellDistance(cellDef, cellAtt) <= maxRange && lineOfSight(cellDef, cellAtt, leekIgnores)) {
+					temp[cellDef] = 5;
+				}else if(!mapContainsKey(temp, cellDef)) {
+					for(var cellArea in area1){
+						if(lineOfSight(cellArea, cellAtt, leekIgnores) && getCellDistance(cellArea, cellAtt) <= maxRange) {		
+							temp[cellDef] = 4;
+						}
+					}
+				} else {
+					if (!temp[cellDef]) {
+						temp[cellDef] = 0;
+					}
+				}
+				
+				if (!res[cellDef]){
+					res[cellDef] = temp[cellDef];
+				} else if(temp[cellDef] >= res[cellDef]) {
+					res[cellDef] = temp[cellDef];
+				}
+			}
+			if (!res[cellDef]){
+				res[cellDef] = 0;
+			}
+		}
+		
+		leek.mapDanger = res;
+		Cache.initMapDanger = res;
+		for (var cell : var value in res) {	
+			integer dist = getCellDistance(cell, Carte.calculateTeamCenter('ally'));
+			if (dist > 7) {
+				value += 1;
+			}
+		}
+		Operations.stopOp('Carte : light safeMap');
+	}
+	
+	static integer getOneCellMap(integer leekId) {
+		Operations.startOp('Carte : getOneCellSafeMap');
+		if (Cache.oneCellSafeMap) return Cache.oneCellSafeMap;
+		Array<integer> allies = [];
+		for(Leek leek in Cache.leeks) {
+			if (leek.ally && leek.life > 0) {
+				push(allies, leek.id);
+			}
+		}
+		var epicenterAllies = Carte.calculateTeamCenter('ally');
+
+		Leek leek = Cache.leeks[leekId];
+		if (!leek.mapDanger) {
+			Carte.lightSafeMap(leekId);
+		}
+		real minDanger = leek.mapDanger[leek.cell];
+		integer cellMinDanger = leek.cell;
+		integer? dist;
+		integer? dist2 = 99;
+		integer? dist3 = 0;
+		Array<integer> leeks = arrayConcat(getAliveAllies(), getAliveEnemies());
+		Array<integer> leekIgnores;
+		integer cellToApproach;
+		integer myMp = getMP();
+		
+		/*if (Cache.bossInvulne && getTurn() >= 2) {
+			if (!Cache.Fenouille.graal) {
+				cellToApproach = epicenterAllies;
+			}
+			if (getCellDistance(getCell(), Cache.Fenouille.graal.cell) <= getMP())
+			{
+				// on est pas très loin du graal, on se regroupe car on est déjà bien placé.
+				return epicenterAllies;
+			} else {
+				return Cache.Fenouille.graal.cell; // ça ma cassé les c******
+			}
+		
+		}
+		else if (Cache.boss == BOSS_EVIL_PUMPKIN) {
+			cellToApproach = 306; // mapCenter;
+		}
+		else*/ if (count(allies) > 1) {
+			cellToApproach = epicenterAllies;
+		}
+		else {
+			cellToApproach = Carte.calculateTeamCenter('enemy');
+		}
+		
+		for (integer entity in leeks) {
+			push(leekIgnores, getCell(entity));
+		}
+
+		for(integer cell : integer mp in leek.getCellAccess()) {
+			dist = getPathLength(leek.cell, cell);
+			if (dist > myMp) continue; // can't access this cell
+			integer? tempDist = getPathLength(cell, cellToApproach);
+			if (!tempDist) {
+				tempDist = getCellDistance(cell, cellToApproach);
+			}
+			
+			if (tempDist && tempDist < dist2 && (leek.mapDanger[cell] == 0)/* || leek.relativeShield > 100*/) {
+				cellMinDanger = cell;
+				minDanger = leek.mapDanger[cell];
+				dist2 = tempDist;
+			}
+			if (minDanger > leek.mapDanger[cell] && tempDist > dist3) {
+				minDanger = leek.mapDanger[cell];
+				cellMinDanger = cell;
+				dist3 = tempDist;
+			}
+		}
+		Cache.oneCellSafeMap = cellMinDanger;
+		Operations.stopOp('Carte : getOneCellSafeMap');
+		return cellMinDanger;
+	}
+
+	public static setObstacles() {
+		for (integer cell = 0; cell < 613; cell++) {
+			if (getCellContent(cell) == CELL_OBSTACLE) {
+				Carte.obstacles[cell] = true;
+			}
+		}
+	}
+
+	public static Map<integer, Array<integer>> getDrawCells() {
+		boolean isSafe;
+		Map<integer, Array<integer>> res = [:];
+
+		for (integer cell = 0; cell < 613; cell++) {
+			if (getCellContent(cell) == CELL_OBSTACLE) continue;
+			isSafe = true;
+			for (var area1 in Cache.areaCell1[cell]) {
+				if (getCellContent(area1) != CELL_OBSTACLE) {
+					isSafe = false;
+				}
+			}
+			if (isSafe) {
+				res[cell] = [];
+				for (var area2 : var osef in Cache.areaCell2[cell]) {
+					if (getCellContent(area2) == CELL_EMPTY && !mapContainsKey(res, area2)) {
+						push(res[cell], area2);
+						push(Cache.nearDrawCells, area2);
+					}
+				}
+			}
+		}
+		//mark(Cache.nearDrawCells, COLOR_GREEN, 1);
+		//debug(res);pause();
+		Cache.nearDrawCells = arrayUnique(Cache.nearDrawCells);
+		Cache.drawCells = res;
+		mark(mapKeys(Cache.drawCells), COLOR_RED,1);
+	}
+
+	/**
+	* @desc Retourne la première entité sur la ligne entre cellFrom et cellTo
+	* @param integer cellFrom
+	* @param integer cellTo
+	* @return integer|null
+	*/
+	/*static integer? getFirstEntityOnLine(integer cellFrom, integer cellTo) {
+		item.maxRange
+		integer cellFromX = getCellX(cellFrom);
+		integer cellFromY = getCellY(cellFrom);
+		integer cellToX = getCellX(cellTo);
+		integer cellToY = getCellY(cellTo);
+
+		// Calcul des différences de coordonnées
+		integer dx = cellToX - cellFromX;
+		integer dy = cellToY - cellFromY;
+
+		// Calcul des incréments
+		integer stepX = dx == 0 ? 0 : dx / abs(dx); // 1, -1 ou 0 si sur la même ligne
+		integer stepY = dy == 0 ? 0 : dy / abs(dy); // 1, -1 ou 0 si sur la même colonne
+
+		// Initialisation des positions actuelles
+		integer currentX = cellFromX + stepX;
+		integer currentY = cellFromY + stepY;
+		integer entityOnCell;
+		integer? res = null;
+
+		// Parcourir toutes les cellules entre cellFrom et cellTo (excluant cellTo)
+		while (currentX != cellToX || currentY != cellToY) {
+			integer currentCell = getCellFromXY(currentX, currentY);
+			if (mapContainsKey(Carte.obstacles, currentCell)) return null;
+
+			// Vérifier si une entité est sur la cellule actuelle
+			entityOnCell = Carte.getEntityOnCell(currentCell)
+			if (entityOnCell != -1) {
+				if (entityOnCell && res) return null;
+				res = entityOnCell;
+			}
+
+			// Avancer sur la ligne
+			currentX += stepX;
+			currentY += stepY;
+		}
+
+		return res;
+	}*/
+
+	/**
+	* @desc Retourne la première entité sur la ligne entre cellFrom et cellTo qui est dans la range de l'item
+	* @param integer cellFrom
+	* @param integer cellTo
+	* @param Item item
+	* @return integer|null
+	*/
+	static integer? getFirstEntityOnLine(integer cellFrom, integer cellTo, Item item) {
+		integer cellFromX = getCellX(cellFrom);
+		integer cellFromY = getCellY(cellFrom);
+		integer cellToX = getCellX(cellTo);
+		integer cellToY = getCellY(cellTo);
+
+		// Calcul des différences de coordonnées
+		integer dx = cellToX - cellFromX;
+		integer dy = cellToY - cellFromY;
+
+		// Calcul des incréments
+		integer stepX = dx == 0 ? 0 : dx / abs(dx); // 1, -1 ou 0 si sur la même ligne
+		integer stepY = dy == 0 ? 0 : dy / abs(dy); // 1, -1 ou 0 si sur la même colonne
+
+		// Initialisation des positions actuelles
+		integer currentX = cellFromX;
+		integer currentY = cellFromY;
+		integer entityOnCell;
+		integer? res = null;
+
+		// Calcul de la distance max et min à parcourir en fonction de la range de l'item
+		integer maxDistance = (item.id == CHIP_BOXING_GLOVE) ? item.maxRange -1 : item.maxRange;
+		integer minDistance = (item.id == CHIP_GRAPPLE) ? item.minRange + 1 : item.minRange;
+		
+		// Variable pour compter la distance parcourue depuis cellFrom
+		integer distance = 0;
+
+		// Parcourir toutes les cellules entre cellFrom et cellTo (excluant cellTo)
+		while ((currentX != cellToX || currentY != cellToY) && distance <= maxDistance) {
+			if (distance >= minDistance) {
+				integer currentCell = getCellFromXY(currentX, currentY);
+				
+				// Vérifier si la cellule contient un obstacle
+				if (mapContainsKey(Carte.obstacles, currentCell)) return null;
+
+				// Vérifier si une entité est sur la cellule actuelle
+				entityOnCell = Carte.getEntityOnCell(currentCell);
+				if (entityOnCell != -1) {
+					// Si on a déjà trouvé une entité, et qu'une autre est rencontrée, on renvoie null
+					if (res != null) return null;
+
+					// Enregistrer la première entité trouvée
+					res = entityOnCell;
+				}
+			}
+
+			// Avancer sur la ligne
+			currentX += stepX;
+			currentY += stepY;
+			distance++;
+		}
+
+		// Retourner l'entité trouvée ou null s'il n'y en a pas
+		return res;
+	}
+
+}

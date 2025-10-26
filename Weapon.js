@@ -11,15 +11,20 @@ class Weapon extends Item {
 		this.cooldown = 0;
 		this.needLos = weaponNeedLos(id);
 		this.launchType = getWeaponLaunchType(id);
+		this.maxUse = max(1, getWeaponMaxUses(id));
 		this.is_weapon = true;
 		super.getMainTarget();
-		super.getDamagePerTp();
 	}
-	getItemEffectiveArea(Weapon weapon, integer cell, integer cellEnemy) {
-		return getWeaponEffectiveArea(weapon.id, cellEnemy, cell);
+	getItemEffectiveArea(integer cell, integer cellTo) {
+		return getWeaponEffectiveArea(this.id, cellTo, cell);
 	}
-	static boolean needSetWeapon(Leek leek, Weapon|null weapon) {
-		if(weapon == null) return true; // have to fix this
-		return leek.weapon == weapon.id;
+	boolean isEntityInArea(integer cell, integer cellTo) {
+		Array<integer> cells = getWeaponEffectiveArea(this.id, cellTo, cell);
+		for (integer cellule in cells) {
+			if (isEntity(cellule)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

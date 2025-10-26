@@ -1,0 +1,190 @@
+include('Carte');
+include('Target');
+include('Action');
+include('BossFenouille');
+include('Leek');
+include('Scoring');
+include('ScoringTest');
+include('Item');
+include('Weapon');
+include('Chip');
+include('Cache');
+include('Combo');
+include('Potiron');
+include('Operations');
+
+function main() {
+	integer me = getEntity();
+
+	// Set Cache
+	if (getTurn() == 1) {
+		Cache.initCache();
+	} else {
+		Cache.resetCache();
+		Cache.updateCache();
+	}
+
+	if (ScoringTest.active) {
+		ScoringTest.run();
+	}
+	
+	if (Cache.boss == BOSS_FENNEL_KING) {
+		if (Cache.turn == 2) {
+			Cache.Fenouille.TpNearGrall();
+			Cache.resetCache();
+			Cache.updateCache();
+		}
+	}
+
+	// Mode draw WS
+	Array<integer> allies = [];
+	Array<integer> enemies = [];
+	for (Leek entity in Cache.leeks) {
+		if (entity.type == ENTITY_LEEK && entity.life > 0) {
+			if (entity.ally) {
+				push(allies, entity.id);
+			} else {
+				push(enemies, entity.id);
+			}
+		}
+	}
+
+	/*if (Cache.fightType == FIGHT_TYPE_FARMER && getName() != "Sarow") {
+		if (count(enemies) >= count(allies) + 2) { // mode draw
+			// Faire la draw avant d'utiliser mes actions sinon on a toujours plus de mp ?
+			integer dist = 99;
+			integer tempDist;
+			integer? safeCellForJump;
+			var myCell = getCell();
+			for (var cell in Cache.nearDrawCells) {
+				tempDist = getCellDistance(myCell, cell);
+				if (tempDist < dist) {
+					safeCellForJump = cell;
+					dist = tempDist;
+				}
+			}
+			debug('safeCellForJump : ' + safeCellForJump);
+			if (safeCellForJump) {
+				moveTowardCell(safeCellForJump);
+				if (getCell() == safeCellForJump) {
+					for (var cell in mapKeys(Cache.drawCells)) {
+						if (getCellDistance(cell, getCell()) <= Cache.items[CHIP_JUMP].maxRange) {
+							useChipOnCell(CHIP_JUMP, cell);
+							Cache.noMoreJump = true;
+						}
+					}
+				}
+				debug('goToDraw');
+			} else {
+				moveTowardCell(Carte.getCellNearAlly(me));	
+			}
+		}
+	}*/
+	
+	// Potiron
+	if (Cache.boss == BOSS_EVIL_PUMPKIN) {
+		Cache.forceNoMove = false;
+		integer? cellToCover = Potiron.getCellRes();
+		if (cellToCover && Carte.isEmptyCell(cellToCover)) {
+			Potiron.coverCell(cellToCover, me);
+			debug('force no move : ' + Cache.forceNoMove);
+			Cache.enemiesTargets = null;
+			//Cache.updateCache();
+			Cache.leeks[me].mp = 0;
+			Cache.leeks[me].cellAccess = [0:getCell()];
+		}
+	}
+	
+	// Set up leek.actions
+	Array<integer> items = arrayConcat(Cache.leeks[me].weapons, Cache.leeks[me].chips);
+	Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Cache.leeks[me].getCellAccess());
+	Cache.leeks[me].initActions = clone(Cache.leeks[me].actions);
+	Array<Action> actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
+	Array<Action> sortedActions = Combo.sortCombo(actions);
+	Cache.leeks[me].combos[0] = sortedActions;
+	Cache.LeeksStates[0] = clone(Cache.leeks);
+	//if (inArray(Cache.leeks[me].weapons, WEAPON_HEAVY_SWORD)) {
+	if (inArray(Cache.leeks[me].weapons, WEAPON_KATANA)) {
+		Cache.leeks[me].resetActions();
+		Combo.getCombos(Cache.leeks[me].actions);
+	}
+	integer comboId = Combo.evaluateCombos(me);
+	sortedActions = Cache.leeks[me].combos[comboId];
+	
+	// use Actions
+	for (Action action in sortedActions) {
+		debug(action);
+		Action.useAction(me, action);
+	}
+	
+	// prevent bug or tp left with critical i can't simule it before
+	if (getTP() >= 3 && !Cache.forceNoMove) {
+		debug('additionnal actions');
+		Cache.resetCache();
+		Cache.updateCache();
+		Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Carte.getCellulesAccessibles(getCell(), getMP()));
+		actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
+		sortedActions = Combo.sortCombo(actions);
+		for (Action action in sortedActions) {
+			Action.useAction(me, action);
+			debug(action);
+		}
+	}
+	
+	// Move
+	if (getMP() > 0 && !Cache.forceNoMove && getOperations() < getMaxOperations() * 0.8) {
+		if (Cache.fightType == FIGHT_TYPE_TEAM || Cache.fightType == FIGHT_TYPE_FARMER) {
+			allies = [];
+			enemies = [];
+			for (Leek entity in Cache.leeks) {
+				if (entity.type == ENTITY_LEEK && entity.life > 0) {
+					if (entity.ally) {
+						push(allies, entity.id);
+					} else {
+						push(enemies, entity.id);
+					}
+				}
+			}
+			
+			if (count(allies) >= count(enemies) + 2 && count(enemies) > 0) { // mode offensif
+				moveToward(enemies[0]);
+			} else {
+				moveTowardCell(Carte.getCellNearAlly(me));
+				/*if (getOperations() < getMaxOperations() * 0.8 && Cache.turn > 30) {
+					moveTowardCell(Carte.getOneCellMap(me));
+				} else {*/
+					
+				//}
+			}
+		} else if (Cache.fightType == FIGHT_TYPE_BOSS && Cache.boss == BOSS_FENNEL_KING) {
+			if (Cache.Fenouille.graal.invulne) {
+				if (Cache.turn < 20) {
+					moveTowardCell(Cache.Fenouille.graal.cell);
+				} else {
+					moveTowardCell(Carte.getCellNearAlly(me));		
+				}
+			} else {
+				moveTowardCell(Carte.getCellNearAlly(me));	
+			}
+		} else {
+			moveTowardCell(Carte.getOneCellMap(me));
+		}
+	}
+	// Weapon meta
+	if (Cache.leeks[me].tp >= 1) {
+		if (inArray(Cache.leeks[me].weapons, WEAPON_HEAVY_SWORD) && Cache.leeks[me].weapon != Cache.items[WEAPON_HEAVY_SWORD]) {
+			setWeapon(WEAPON_HEAVY_SWORD);
+		} else if (inArray(Cache.leeks[me].weapons, WEAPON_NEUTRINO) && Cache.leeks[me].weapon != Cache.items[WEAPON_NEUTRINO]) {
+			setWeapon(WEAPON_NEUTRINO);
+		}
+	}
+	
+	//if (Operations.debugOpe) {
+		debug("J'ai utilisé " + getOperations() + ' sur ' + getMaxOperations() + ' et je finis à ' + getTP() + ' tp');
+	//}
+	if (Cache.leeks[me].type == ENTITY_LEEK && Cache.fightType == FIGHT_TYPE_FARMER && (number(getRegister(getName())) < getOperations())) {
+		setRegister(getName(), getOperations());
+		setRegister('fight id', getFightID());
+	}
+}
+main();
