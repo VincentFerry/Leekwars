@@ -7,7 +7,7 @@ class Action{
 	integer cellTo
 	real priority = 0.0;
 	Array<Target> targets = [];
-	integer entityToRes;
+	integer entityToRes = -1;
 	
 	constructor(Leek leek, Item item, integer cellFrom, integer cellTo) {
 		this.item = item;
@@ -220,7 +220,6 @@ class Action{
 					plasmaMultiplicator++;
 				}
 			}
-			if (plasmaMultiplicator < 3) return 0;
 			Cache.items[CHIP_PLASMA].effects = getChipEffects(CHIP_PLASMA);
 			Cache.items[CHIP_PLASMA].effects[0][1] = Cache.items[CHIP_PLASMA].effects[0][1] * plasmaMultiplicator;
 			Cache.items[CHIP_PLASMA].effects[0][2] = Cache.items[CHIP_PLASMA].effects[0][2] * plasmaMultiplicator;
@@ -391,6 +390,31 @@ class Action{
 	}
 	
 	private calcPrioRes() {
+		// Si une cible est déjà imposée, on calcule sa priorité en gardant la logique d'ordre
+		if (this.entityToRes != -1) {
+			if (Cache.leeks[this.entityToRes] == null || Cache.leeks[this.entityToRes].life > 0 || !Cache.leeks[this.entityToRes].ally || Cache.leeks[this.entityToRes].type != ENTITY_LEEK) {
+				this.priority = 0;
+				this.entityToRes = -1;
+				return;
+			}
+			
+			real basePrio = Cache.leeks[this.entityToRes].totalLife / Cache.items[CHIP_RESURRECTION].cost;
+			if (!mapMin(Cache.entitiesOrder)) {
+				this.priority = basePrio * 2;
+			} else {
+				integer mapMini = mapMin(Cache.entitiesOrder);
+				integer mapMaxi = mapMax(Cache.entitiesOrder);
+				integer diff = Cache.entitiesOrder[this.entityToRes] - Cache.entitiesOrder[this.leek.id];
+				if ((diff > 0 && diff < 4) || (Cache.entitiesOrder[this.entityToRes] == mapMini && Cache.entitiesOrder[this.leek.id] == mapMaxi)) {
+					this.priority = basePrio;
+				} else {
+					this.priority = 0;
+				}
+			}
+			return;
+		}
+		
+		// Fallback si pas de cible imposée : choisir le meilleur allié mort selon l'ordre
 		// HOTFIX KILL t1
 		if (!mapMin(Cache.entitiesOrder)) {
 			for (Leek leek in Cache.leeks) {

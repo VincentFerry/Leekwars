@@ -195,13 +195,18 @@ class Leek {
 		for (integer itemId in items) {
 			if (this.chipsCooldown[itemId]) continue;
 			if (itemId == CHIP_RESURRECTION) {
+				if (this.itemMaxUse[itemId] == Cache.items[itemId].maxUse) continue;
 				for (integer key : Leek leek in Cache.leeks) {
 					if (leek.type != ENTITY_LEEK || !leek.ally) continue;
 					if (isAlive(leek.id)) continue;
 					integer? cellToInvoc = Carte.getCellToInvoc(CHIP_RESURRECTION, this.cell, this.id);
 					if (cellToInvoc) {
 						Action action = new Action(this, Cache.items[itemId], this.cell, cellToInvoc);
-						push(actions, action);
+						action.entityToRes = leek.id;
+						action.getPriority();
+						if (action.priority > 0) {
+							push(actions, action);
+						}
 					}
 				}
 				continue;
