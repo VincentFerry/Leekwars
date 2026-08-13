@@ -130,12 +130,12 @@ class Combo{
 				return 1;
 			}
 
-			// Libération after (doit être jouée après les autres debuffs)
+			// Libération first
 			if (a.item.id == CHIP_LIBERATION && b.item.id != CHIP_LIBERATION) {
-				return 1;
+				return -1;
 			}
 			if (a.item.id != CHIP_LIBERATION && b.item.id == CHIP_LIBERATION) {
-				return -1;
+				return 1;
 			}
 
 			// Calculer les distances par rapport à la position actuelle
