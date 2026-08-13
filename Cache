@@ -272,7 +272,8 @@ class Cache {
 	}
 	
 	static Map<integer,boolean> getEffectsBoost() {
-		Cache.effectBoost = [EFFECT_RAW_BUFF_AGILITY:true,
+		Cache.effectBoost = [
+			EFFECT_RAW_BUFF_AGILITY:true,
 			EFFECT_RAW_BUFF_MAGIC:true,
 			EFFECT_RAW_BUFF_MP:true,
 			EFFECT_RAW_BUFF_RESISTANCE:true,
@@ -280,7 +281,6 @@ class Cache {
 			EFFECT_RAW_BUFF_STRENGTH:true,
 			EFFECT_RAW_BUFF_TP:true,
 			EFFECT_RAW_BUFF_WISDOM:true,
-			EFFECT_RAW_BUFF_AGILITY:true,
 			// meme nombre raw que sans raw sinon il va en manquer
 			EFFECT_BUFF_AGILITY:true,
 			//EFFECT_BUFF_MAGIC:true,
@@ -290,12 +290,10 @@ class Cache {
 			EFFECT_BUFF_STRENGTH:true,
 			EFFECT_BUFF_TP:true,
 			EFFECT_BUFF_WISDOM:true,
-			EFFECT_BUFF_AGILITY:true,
-			//EFFECT_AFTEREFFECT,
-			EFFECT_NOVA_VITALITY:true,
 		];
 	}
-	static Map<integer,Map> getAreaCell() {
+
+	static getAreaCell() {
 		Operations.startOp('Cache : getAreaCell');
 		for (integer cell = 0; cell < 613; cell++) {
 			if (getCellContent(cell) == CELL_OBSTACLE) continue;

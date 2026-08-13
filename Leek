@@ -341,8 +341,9 @@ class Leek {
 		}
 		
 		if (actions[key].item.id == CHIP_RESURRECTION) {
-			Cache.leeks[actions[key].entityToRes].totalLife = 0.25 * Cache.leeks[actions[key].entityToRes].totalLife;
-			Cache.leeks[actions[key].entityToRes].life = Cache.leeks[actions[key].entityToRes].totalLife / 2;
+			var originalTotalLife = Cache.leeks[actions[key].entityToRes].totalLife;
+			Cache.leeks[actions[key].entityToRes].totalLife = round(0.25 * originalTotalLife);
+			Cache.leeks[actions[key].entityToRes].life = Cache.leeks[actions[key].entityToRes].totalLife;
 			Cache.leeks[actions[key].entityToRes].cell = actions[key].cellTo;
 			Cache.leeks[leekId].cell = actions[key].cellFrom; // doesn't work ?
 		}

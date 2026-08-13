@@ -70,8 +70,10 @@ class Scoring {
         }
         /* @todo calculer réellement les renvoi de damages, facile en utilisant la value */
         var valueBeforeShield = effect[1] * areaMulti * ( 1 + Cache.leeks[leek.id].strength/100) * (1 + Cache.leeks[leek.id].power / 100);
-        var crit = Cache.leeks[leek.id].agility >= 900 ? CRITICAL_FACTOR : 1; // Trust
-        var value = valueBeforeShield * crit * (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+        var agility = Cache.leeks[leek.id].agility;
+        var critProb = agility >= 1000 ? 1.0 : (agility >= 100 ? (agility - 100) / 900.0 : 0.0);
+        var critFactor = 1.0 + critProb * (CRITICAL_FACTOR - 1.0);
+        var value = valueBeforeShield * critFactor * (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
         if (value < 0) value = 0;
 
         /* Renvoi de domage */
@@ -82,8 +84,8 @@ class Scoring {
             var healValue = value * Cache.leeks[leek.id].wisdom / 1000;
             maxHeal = (healValue > maxHeal) ? maxHeal * HEAL : healValue * HEAL;    
         }
-        /* Erosion */
-        var erosion = value * 0.05 * NOVA;
+        /* Erosion (5% des dégâts bruts, permanente) */
+        var erosion = value * 0.05;
 
         if (Cache.leeks[entity].ally) {
             if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
@@ -201,7 +203,7 @@ class Scoring {
     public static Object getPrioRawBuffStrength(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         var prio = 0;
         if (Cache.leeks[entity].strength < 399) {
-			return {prio : -20, value: 0};
+			return {prio : 0, value: 0};
         }
         real statsMultiplicator = Cache.leeks[entity][Cache.effectStatsLinks[effect[0]].stats] / 200;
 		prio += effect[1] * effect[3] * STRENGTH * entityPrio * statsMultiplicator;
@@ -244,7 +246,8 @@ class Scoring {
         var prio = 0;
         if (item.id == CHIP_ANTIDOTE) return {prio : 0, value: 0};
         if (Cache.leeks[entity] == null) {
-            debug('entity with no cache : ' + entity);pause();
+            debugE('entity with no cache : ' + entity);
+            return {prio : 0, value: 0};
         }
         real maxHeal = Cache.leeks[entity].totalLife - Cache.leeks[entity].life;
         if (item.id == CHIP_REGENERATION && maxHeal < 1800) return {prio : 0, value: 0};
@@ -511,60 +514,21 @@ class Scoring {
     }
 
     public static Object getPrioShackleAgility(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
-        return {prio : 0, value : 0};
+        if (entity == -1) return {prio : 0, value: 0};
+        if (Cache.leeks[entity].agility < 200) return {prio : 0, value : 0};
+        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100)) * effect[3];
+        if (value == 0) return {prio : 0, value : 0};
+        var prio = 0;
+        if (Cache.leeks[entity].ally) {
+            prio -= value * GENERIC_STATS * entityPrio;
+        } else {
+            prio += value * GENERIC_STATS * entityPrio;
+        }
+        return {prio : prio / item.cost, value : value};
     }
 
     public static Object getPrioInvert(Array effect, integer cellFrom, integer cellTo, integer entity) {
         return {prio : 0, value : 0};
-    }
-
-    public static Object getPrioPush(Array effect, integer cellFrom, integer cellTo, integer entity) {
-        if (Cache.boss == BOSS_FENNEL_KING) {
-			var prio = Cache.Fenouille.getPrio(entity, Cache.items[CHIP_BOXING_GLOVE], Cache.leeks[getEntity()], cellFrom, cellTo);
-            return {prio : prio, value : 0};
-		}
-        if (!Carte.isEmptyCell) return {prio : 0, value : 0};
-        if (Cache.leeks[entity].cell == cellTo) return {prio : 0, value : 0};
-        var prio = 0;
-        if (!Cache.leeks[entity].ally) {
-            var cellCenter = Carte.calculateTeamCenter('enemy');
-            var d1 = getCellDistance(Cache.leeks[entity].cell, cellCenter);
-            var d2 = getCellDistance(cellTo, cellCenter);
-            if (d2 > d1) {
-                prio = (d2 - d1) * 1000;
-            }
-        }
-        
-        return {prio : prio, value : 0};
-    }
-
-    public static Object getPrioAttract(Array effect, integer cellFrom, integer cellTo, integer entity) {
-        if (Cache.boss == BOSS_FENNEL_KING) {
-			var prio = Cache.Fenouille.getPrio(entity, Cache.items[CHIP_GRAPPLE], Cache.leeks[getEntity()], cellFrom, cellTo);
-            return {prio : prio, value : 0};
-		}
-        if (!Carte.isEmptyCell) return {prio : 0, value : 0};
-        if (Cache.leeks[entity].cell == cellTo) return {prio : 0, value : 0};
-        var prio = 0;
-        if (!Cache.leeks[entity].ally) {
-            var cellCenter = Carte.calculateTeamCenter('enemy');
-            var d1 = getCellDistance(Cache.leeks[entity].cell, cellCenter);
-            var d2 = getCellDistance(cellTo, cellCenter);
-            if (d2 > d1) {
-                prio = (d2 - d1) * 1000;
-            }
-        }
-        return {prio : prio, value : 0};
-    }
-
-    public static Object getPrioAfterEffect(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
-        var prio = 0;
-        var value = effect[1] * areaMulti * (1 + leek.science / 100) * effect[3];
-        if (Cache.leeks[entity].life < value) {
-            return {prio : 0, value : 0};
-        } else {
-            return {prio : prio, value : 0};
-        }
     }
 
     public static Object getPrioAntidote(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {

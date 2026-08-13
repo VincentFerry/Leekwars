@@ -44,7 +44,7 @@ class Potiron {
 		integer|string res = 0;
 		for (var i = 0; i<msgLength; i++) {
 			if (!mapContainsKey(Potiron.glagolitique, charAt(msg, i))) {
-				debugE('caractère : ' + charAt(msg, i));pause();
+				debugE('caractère : ' + charAt(msg, i));
 			} else {
 				res += Potiron.glagolitique[charAt(msg, i)];
 			}
@@ -112,7 +112,6 @@ class Potiron {
 			debug(allNumbers);
 			debug(finalRes);
 			//show(finalRes);
-			pause();
 		} else if (isSummon()) {
 			Array messages = getMessages();
 			if (messages) {
@@ -120,7 +119,6 @@ class Potiron {
 				Cache.leeks[getEntity()].mp = 0;
 			}
 			debug('messages : ' + messages);
-			pause();
 		} else {
 			debug('says : ' + Potiron.says);
 		}
@@ -228,6 +226,6 @@ class Potiron {
 			}
 		}
 		debug('not cover');
-		debug('cell to cover : ' + cellToCover + ', my cell : ' + me.cell);pause();
+		debug('cell to cover : ' + cellToCover + ', my cell : ' + me.cell);
 	}
 }

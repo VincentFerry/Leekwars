@@ -35,18 +35,12 @@ class BossFenouille {
 				this.cRouge = Cache.leeks[enemy];
 			}
 		}
-		critauxId = [
-			this.cBleu.id,
-			this.cVert.id,
-			this.cJaune.id,
-			this.cRouge.id,
-		];
-		cristaux = [
-			this.cBleu,
-			this.cVert,
-			this.cJaune,
-			this.cRouge,
-		];
+		critauxId = [];
+		cristaux = [];
+		if (this.cBleu) { push(critauxId, this.cBleu.id); push(cristaux, this.cBleu); }
+		if (this.cVert) { push(critauxId, this.cVert.id); push(cristaux, this.cVert); }
+		if (this.cJaune) { push(critauxId, this.cJaune.id); push(cristaux, this.cJaune); }
+		if (this.cRouge) { push(critauxId, this.cRouge.id); push(cristaux, this.cRouge); }
 		//define path
 		this.getCellsTargets();
 	}

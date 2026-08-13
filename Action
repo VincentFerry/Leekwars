@@ -242,7 +242,7 @@ class Action{
 		for (integer areaCell in areaCells) {
 			real areaMulti = Carte.areaMultiplicator[getCellDistance(areaCell, cellTo)];
 
-			baseEntity = getEntityOnCell(areaCell); // marche pas, je vois pas pk j'ai écris ça
+			baseEntity = Carte.getEntityOnCell(areaCell);
 			if (areaCell == leek.cell && this.cellFrom != leek.cell) baseEntity = -1; // delete last placment
 			if (baseEntity == leek.id && this.cellTo != Cache.leeks[leek.id].cell) baseEntity = -1;
 			if (cellFrom == areaCell) baseEntity = leek.id; // premove Deplacment;

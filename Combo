@@ -99,16 +99,17 @@ class Combo{
 		}
 		
 		if (action.cellFrom == action.cellTo && action.item.area == AREA_POINT) return true; // hardcoded fix
-		integer? dist = getPathLength(Cache.leeks[leekId].cell, action.cellFrom, [getCell()]);	
+		integer? dist = getPathLength(Cache.leeks[leekId].cell, action.cellFrom, [getCell()]);
 
-		// Issue without chip jump ??
-		if (dist && dist > Cache.leeks[leekId].mp
-		&& action.cellFrom != Cache.leeks[leekId].cell
-		&& Cache.leeks[leekId].chipsCooldown[CHIP_JUMP] == true
-		|| !inArray(Cache.leeks[leekId].chips, CHIP_JUMP)
-		|| dist > Cache.leeks[leekId].mp + Cache.items[CHIP_JUMP].maxRange
-		|| Cache.leeks[leekId].tp < action.item.cost + Cache.items[CHIP_JUMP].cost) {
-			return false;
+		// Si la cellFrom est hors de portée MP direct, vérifier si un saut peut aider
+		if (dist && dist > Cache.leeks[leekId].mp && action.cellFrom != Cache.leeks[leekId].cell) {
+			// Pas de saut disponible ou saut insuffisant
+			if (Cache.leeks[leekId].chipsCooldown[CHIP_JUMP] == true
+			|| !inArray(Cache.leeks[leekId].chips, CHIP_JUMP)
+			|| dist > Cache.leeks[leekId].mp + Cache.items[CHIP_JUMP].maxRange
+			|| Cache.leeks[leekId].tp < action.item.cost + Cache.items[CHIP_JUMP].cost) {
+				return false;
+			}
 		}
 
 		return true;
@@ -129,12 +130,12 @@ class Combo{
 				return 1;
 			}
 
-			// Libération after
+			// Libération after (doit être jouée après les autres debuffs)
 			if (a.item.id == CHIP_LIBERATION && b.item.id != CHIP_LIBERATION) {
-				return -1;
+				return 1;
 			}
 			if (a.item.id != CHIP_LIBERATION && b.item.id == CHIP_LIBERATION) {
-				return 1;
+				return -1;
 			}
 
 			// Calculer les distances par rapport à la position actuelle

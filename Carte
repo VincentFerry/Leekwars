@@ -340,7 +340,7 @@ class Carte {
 		if (oneCroisement && one_one_path && one_two_path && count(one_one_path) == getCellDistance(cellFrom, oneCroisement) && count(one_two_path) == getCellDistance(oneCroisement, cellTo)) {			
 			return arrayConcat(one_one_path, one_two_path);
 		} else if (twoCroisement && second_one_path && second_two_path && count(second_one_path) == getCellDistance(cellFrom, twoCroisement) && count(second_two_path) == getCellDistance(twoCroisement, cellTo)) {
-			return arrayConcat(one_one_path, one_two_path);
+			return arrayConcat(second_one_path, second_two_path);
 		} else {
 			return getPath(cellFrom, cellTo);
 		}
@@ -770,7 +770,7 @@ class Carte {
 		//debug(res);pause();
 		Cache.nearDrawCells = arrayUnique(Cache.nearDrawCells);
 		Cache.drawCells = res;
-		mark(mapKeys(Cache.drawCells), COLOR_RED,1);
+		//mark(mapKeys(Cache.drawCells), COLOR_RED,1);
 	}
 
 	/**
