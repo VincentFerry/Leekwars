@@ -17,7 +17,7 @@ class Action{
 		this.getPriority();
 	}
 	
-	private getPriority() {
+	public getPriority() {
 		this.priority = 0;
 		this.targets = [];
 		if (mapContainsKey(Cache.chipsSummon, this.item.id)) {
