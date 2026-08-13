@@ -88,22 +88,13 @@ class Scoring {
         var erosion = value * (0.05 + critProb * 0.10);
 
         if (Cache.leeks[entity].ally) {
-            if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
-                if (value >= Cache.leeks[entity].life) {
-                    return {prio : -10000, value: value};
-                } else {
-                    prio -= (value  + erosion) * entityPrio / (item.cost+1);
-                }
-            } else {
-                if (value >= Cache.leeks[entity].life) {
-                    return {prio : -10000, value: value};
-                } else {
-                    prio -= (value  + erosion) * entityPrio / (item.cost+1);
-                }
+            if (value >= Cache.leeks[entity].life) {
+                return {prio : -10000, value: value};
             }
+            prio -= (value + erosion) * entityPrio;
         } else {
             if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
-            prio += (value  + maxHeal + erosion * entityPrio / (item.cost+1));
+                prio += (value  + maxHeal + erosion * entityPrio / (item.cost+1));
             } else {
                 prio += (value  + maxHeal + erosion * entityPrio / item.cost);
             }
