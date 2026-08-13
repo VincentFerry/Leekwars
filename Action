@@ -30,7 +30,7 @@ class Action{
 		// turn 1 config depends on meta
 		if (Cache.turn == 1) {
 			if (this.item.id == CHIP_REFLEXES || this.item.id == CHIP_WARM_UP) {
-				this.priority = this.priority * 100;
+				this.priority = this.priority * 1000;
 			} else if (this.item.id == CHIP_PRISM) {
 				this.priority = this.priority * 75;
 			} else if ((this.item.id == CHIP_KNOWLEDGE || this.item.id == CHIP_SOLIDIFICATION) && this.cellFrom == this.cellTo) {
