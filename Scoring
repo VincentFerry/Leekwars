@@ -84,8 +84,8 @@ class Scoring {
             var healValue = value * Cache.leeks[leek.id].wisdom / 1000;
             maxHeal = (healValue > maxHeal) ? maxHeal * HEAL : healValue * HEAL;    
         }
-        /* Erosion (5% des dégâts bruts, permanente) */
-        var erosion = value * 0.05;
+        /* Erosion (5% des dégâts subis, 15% si critique) */
+        var erosion = value * (0.05 + critProb * 0.10);
 
         if (Cache.leeks[entity].ally) {
             if (item.is_weapon && Cache.leeks[leek.id].weapon && Cache.leeks[leek.id].weapon.id != item.id) {
@@ -280,7 +280,7 @@ class Scoring {
 		} else {
 			prio += value + value * multiplicator;
 		}
-		return {prio : prio / item.cost, value: prio};
+		return {prio : prio / item.cost, value: value};
     }
 
     public static Object getPrioRawHeal(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
@@ -295,20 +295,21 @@ class Scoring {
     public static Object getPrioNovaDamage(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         var prio = 0;
         if (Cache.leeks[entity].type == ENTITY_BULB)  return {prio : 0, value: 0};
+        var value = effect[1] * areaMulti * (1 + leek.science / 100);
         if (Cache.leeks[entity].ally) {
-            prio -= abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, effect[1] * areaMulti * (1 + leek.science / 100)));
+            prio -= abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, value));
         } else {
-            prio += abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, effect[1] * areaMulti * (1 + leek.science / 100)));
+            prio += abs(min(Cache.leeks[entity].totalLife - Cache.leeks[entity].life, value));
         }
-        return {prio : prio / item.cost, value: prio};
+        return {prio : prio / item.cost, value: value};
     }
 
     public static Object getPrioDamageReturn(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         /* For Chatiment ? */
-        //if (!Cache.leeks[entity].needShield) return {prio : 0, value: 0};
-        if (item.id == CHIP_BRAMBLE && (Cache.leeks[entity].life > 1800 || Cache.leeks[entity].type == ENTITY_BULB)) return {prio : 0, value: 0};
+        //if (!Cache.leeks[entity].needShield) return {prio : 0, value : 0};
+        if (item.id == CHIP_BRAMBLE && (Cache.leeks[entity].life > 1800 || Cache.leeks[entity].type == ENTITY_BULB)) return {prio : 0, value : 0};
         
-		var value = (effect[1] * areaMulti * (1 + leek.getAgility() / 100)) * effect[3];
+		var value = (effect[1] * areaMulti * (1 + Cache.leeks[leek.id].agility / 100)) * effect[3];
 		var prio = value * DAMAGE_RETURN;
 		return {prio : prio / item.cost, value: value};
     }

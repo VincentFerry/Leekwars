@@ -202,6 +202,7 @@ class Combo{
 			}
 		}
 		
+		// @todo check si le WEAPON_MACHINE_GUN fait partie de nos armes
 		for (integer enemyId : Array<Action> actionsOnEnemy  in enemies) {
 			// hardcoded combo
 			for (Action action in actionsOnEnemy) {
