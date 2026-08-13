@@ -207,6 +207,12 @@ class Action{
 		Object tmpObj;
 		Array<integer> areaCells = item.getItemEffectiveArea(cellFrom, cellTo);
 		
+		boolean hasStealLife = false;
+		if (item.id == WEAPON_QUANTUM_RIFLE) {
+			hasStealLife = true;
+		}
+		real stealLifeValue = 0;
+		
 		integer plasmaMultiplicator = 0;
 		if (item.id == CHIP_PLASMA) {
 			for (integer cell in areaCells) {
@@ -257,6 +263,8 @@ class Action{
 					entityPrio += Cache.enemiesPrio[baseEntity];
 				}
 				for (Array effect in item.effects) {
+					if (effect[0] == EFFECT_STEAL_LIFE) 
+						continue;
 					if (effect[5] & EFFECT_MODIFIER_ON_CASTER) {
 						entity = leek.id;
 					} else {
@@ -265,6 +273,13 @@ class Action{
 					if (mapContainsKey(Scoring.Effects, effect[0])) { // Main Scoring
 					if (item.id == CHIP_BOXING_GLOVE || item.id == CHIP_GRAPPLE) continue; // osef du boost en vrai
 						tmpObj = Scoring.Effects[effect[0]].call(effect, entity, leek, entityPrio, areaMulti, item);
+						if (hasStealLife && effect[0] == EFFECT_NOVA_DAMAGE && baseEntity != -1 && Cache.leeks[baseEntity] != null) {
+							real maxNova = Cache.leeks[baseEntity].totalLife - Cache.leeks[baseEntity].life;
+							if (maxNova > 0) {
+								real effectiveNova = tmpObj.value < maxNova ? tmpObj.value : maxNova;
+								stealLifeValue += effectiveNova;
+							}
+						}
 						Target target = new Target(entity, effect[0],  tmpObj.value)
 						target.addPriority(tmpObj.prio);
 						push(this.targets, target);
@@ -283,6 +298,15 @@ class Action{
 				}
 			}	
 		}
+		
+		if (hasStealLife) {
+			Object stealObj = Scoring.getPrioStealLife(stealLifeValue, leek, item);
+			Target stealTarget = new Target(leek.id, EFFECT_STEAL_LIFE, stealObj.value);
+			stealTarget.addPriority(stealObj.prio);
+			push(this.targets, stealTarget);
+			prio += stealObj.prio;
+		}
+		
 		return prio;
 	}
 	

@@ -304,6 +304,20 @@ class Scoring {
         return {prio : prio / item.cost, value: value};
     }
 
+    public static Object getPrioStealLife(real value, Leek leek, Item item) {
+        real maxHeal = Cache.leeks[leek.id].totalLife - Cache.leeks[leek.id].life;
+        if (maxHeal <= 0 || value <= 0) return {prio : 0, value : 0};
+        if (value > maxHeal) value = maxHeal;
+        real prio = value * HEAL;
+        if (Cache.leeks[leek.id].life < Cache.leeks[leek.id].totalLife / 2) {
+            prio *= 3;
+        }
+        if (Cache.leeks[leek.id].life < Cache.leeks[leek.id].totalLife / 4) {
+            prio *= 2;
+        }
+        return {prio : prio / item.cost, value : value};
+    }
+
     public static Object getPrioDamageReturn(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         /* For Chatiment ? */
         //if (!Cache.leeks[entity].needShield) return {prio : 0, value : 0};

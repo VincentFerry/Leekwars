@@ -390,6 +390,7 @@ class Cache {
 			EFFECT_SHACKLE_TP: {operator: '+', stats: 'tp'},
 			EFFECT_SHACKLE_WISDOM: {operator: '+', stats: 'wisdom'},
 			EFFECT_STEAL_ABSOLUTE_SHIELD: {operator: '+', stats: 'absoluteShield'},
+			EFFECT_STEAL_LIFE: {operator: '+', stats: 'life'},
 			//EFFECT_SUMMON: {operator: '+', stats: 'summon'},
 			/*EFFECT_TARGET_ALLIES: {operator: '+', stats: 'targetAllies'},
 			EFFECT_TARGET_CASTER: {operator: '+', stats: 'targetCaster'},
