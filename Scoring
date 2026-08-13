@@ -527,8 +527,47 @@ class Scoring {
         return {prio : prio / item.cost, value : value};
     }
 
+    public static Object getPrioAfterEffect(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
+        var prio = 0;
+        var value = effect[1] * areaMulti * effect[3];
+        if (Cache.leeks[entity].ally) {
+            prio -= value * entityPrio;
+        } else {
+            prio += value * entityPrio;
+        }
+        return {prio : prio / item.cost, value : value};
+    }
+
     public static Object getPrioInvert(Array effect, integer cellFrom, integer cellTo, integer entity) {
         return {prio : 0, value : 0};
+    }
+
+    public static Object getPrioPush(Array effect, integer cellFrom, integer cellTo, integer entity, Leek leek, Item item) {
+        if (entity == -1) return {prio : 0, value : 0};
+        integer dist = round(effect[1] * (1 + Cache.leeks[leek.id].agility / 100));
+        integer pushDest = getCellTowardCell(Cache.leeks[entity].cell, cellFrom, -dist);
+        if (pushDest == null || !Carte.isEmptyCell(pushDest)) return {prio : 0, value : 0};
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            prio += dist * 2;
+        } else {
+            prio -= dist * 2;
+        }
+        return {prio : prio / item.cost, value : dist};
+    }
+
+    public static Object getPrioAttract(Array effect, integer cellFrom, integer cellTo, integer entity, Leek leek, Item item) {
+        if (entity == -1) return {prio : 0, value : 0};
+        integer dist = round(effect[1] * (1 + Cache.leeks[leek.id].agility / 100));
+        integer attractDest = getCellTowardCell(Cache.leeks[entity].cell, cellFrom, dist);
+        if (attractDest == null || !Carte.isEmptyCell(attractDest)) return {prio : 0, value : 0};
+        var prio = 0;
+        if (!Cache.leeks[entity].ally) {
+            prio += dist * 2;
+        } else {
+            prio -= dist * 2;
+        }
+        return {prio : prio / item.cost, value : dist};
     }
 
     public static Object getPrioAntidote(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
