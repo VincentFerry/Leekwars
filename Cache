@@ -283,13 +283,12 @@ class Cache {
 			EFFECT_RAW_BUFF_WISDOM:true,
 			// meme nombre raw que sans raw sinon il va en manquer
 			EFFECT_BUFF_AGILITY:true,
-			//EFFECT_BUFF_MAGIC:true,
 			EFFECT_BUFF_MP:true,
 			EFFECT_BUFF_RESISTANCE:true,
-			//EFFECT_BUFF_SCIENCE,
 			EFFECT_BUFF_STRENGTH:true,
 			EFFECT_BUFF_TP:true,
 			EFFECT_BUFF_WISDOM:true,
+			EFFECT_NOVA_VITALITY:true,
 		];
 	}
 
