@@ -375,33 +375,55 @@ class Scoring {
         if (effect[5] == 0) { // not cummulable item, should to it globally ?
             for (Array effectEntity in Cache.leeks[entity].effects) {
                 if (effectEntity[5] == item.id) {
-                    return {prio : 0, value: 0};
+                    return {prio : 0, value : 0};
                 }
             }
         }
         var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
-        if (value == 0) return{prio: 0, value:0};
-        var multiplicatorTP = (Cache.leeks[entity].strength >= 400 || Cache.leeks[entity].magic >= 400) ? TP : TP - 5;
+        if (value == 0) return {prio: 0, value:0};
+        if (Cache.leeks[entity].tp <= 0) return {prio : 0, value: value};
+
+        // Plus on retire une grande proportion de TP, plus c'est impactant
+        var totalShackled = value * effect[3];
+        real scarcity = totalShackled / Cache.leeks[entity].tp;
+        real impact = totalShackled * (1 + scarcity);
+
         var prio = 0;
         if (Cache.leeks[entity].ally) {
-            prio -= (value * effect[3]) * multiplicatorTP;
+            prio -= impact * entityPrio;
         } else {
-            prio += (value * effect[3]) * multiplicatorTP;
+            prio += impact * entityPrio;
         }
         return {prio : prio / item.cost, value: value};
     }
 
     public static Object getPrioShackleMp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0}; 
-        var prio = 0;
-        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
-        if (value == 0) return{prio: 0, value:0};
-        if (Cache.leeks[entity].ally) {
-            prio -= value * effect[3] * 70;
-        } else {
-            prio += value * effect[3] * 70;
+        if (effect[5] == 0) { // non cumulable item, should to it globally ?
+            for (Array effectEntity in Cache.leeks[entity].effects) {
+                if (effectEntity[5] == item.id) {
+                    return {prio : 0, value : 0};
+                }
+            }
         }
-        return {prio : prio  / item.cost, value: value};
+        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
+        if (value == 0) return {prio: 0, value:0};
+        if (Cache.leeks[entity].mp <= 0) return {prio : 0, value: value};
+
+        // Plus on retire une grande proportion de MP, plus c'est impactant
+        // Si on retire au moins autant que les MP max, on bloque les deplacements
+        var totalShackled = value * effect[3];
+        real scarcity = totalShackled / Cache.leeks[entity].mp;
+        real lockBonus = (value >= Cache.leeks[entity].mp) ? scarcity : 0.0;
+        real impact = totalShackled * (1 + scarcity + lockBonus);
+
+        var prio = 0;
+        if (Cache.leeks[entity].ally) {
+            prio -= impact * entityPrio;
+        } else {
+            prio += impact * entityPrio;
+        }
+        return {prio : prio / item.cost, value: value};
     }
 
     public static Object getPrioRemoveShackles(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
@@ -449,11 +471,11 @@ class Scoring {
     }
 
     public static Object getPrioPoison(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
-        if (Cache.boss == BOSS_FENNEL_KING) {
+        /*if (Cache.boss == BOSS_FENNEL_KING) {
             if (inArray(Cache.Fenouille.critauxId, Cache.leeks[entity].id) && Cache.Fenouille.graal.invulne) {
                 return {prio : 0, value: 0};
             }
-        }
+        }*/
         if (Cache.leeks[entity].type == ENTITY_BULB && item.cooldown > 0) return {prio:0,value:0};
         if (Cache.leeks[entity].life <= Cache.leeks[entity].getPassiveDamage()) return {prio:0,value:0};
         var prio = 0;
