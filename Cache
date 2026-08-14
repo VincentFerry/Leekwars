@@ -462,79 +462,101 @@ class Cache {
 		}
 	}
 
-	// TODO Ajout de critères multiples en fonction des shields / vie / vie max / vulnérabilité / entity turn order
-	/*static getFocusPrio() {
-		Operations.startOp();
-		var myId = getEntity();
-		Map<integer,Leek> allies = mapFilter(Cache.leeks, function(a) {return (a.ally && a.type == ENTITY_LEEK && a.life>0);});
-		Map<integer,Leek> enemies = mapFilter(Cache.leeks, function(a) {return (!a.ally && a.type == ENTITY_LEEK && a.life>0);});
-		Map<integer,integer> cellEnemies = [:];
-		Map<integer,boolean> checkDone = [:];
-		for (Leek enemy in enemies) {
-			cellEnemies[enemy.id] = enemy.cell;
-		}
-
-		Cache.enemiesPrio = [:];
-		for (Leek ally in allies) {
-			checkDone[ally.id] = false;
-			for (integer cell : integer dist in ally.getCellAccess()) {
-				for (integer enemyId : integer cellEnemy in cellEnemies) {
-					Cache.enemiesPrio[enemyId] = 1;
-					//if (Cache.isEntityPlayBefore(enemyId, ally.id, myId)) continue;
-					if (!lineOfSight(cell, cellEnemy)) continue;
-					if (getCellDistance(cell, cellEnemy) > 10) continue;
-					if (getCellDistance(cell, cellEnemy) < 0) continue;
-					var cellFromX = getCellX(cell);
-					var cellFromY = getCellY(cell);
-					var cellToX = getCellX(cellEnemy);
-					var cellToY = getCellY(cellEnemy);
-					if ((!isOnSameLine(cell, cellEnemy)) || (abs(cellFromX-cellToX) != abs(cellFromY-cellToY) && !isOnSameLine(cell, cellEnemy))) continue;
-					Cache.enemiesPrio[enemyId]++;
-					checkDone[ally.id] = true;
-				}
-				if (checkDone[ally.id]) break;
-			}
-		}
-		debug('enemies prio : ' + Cache.enemiesPrio);
-		Operations.stopOp('Carte : getFocusPrio');
-	}*/
-
-	static void getFocusPrio() {
+	static getFocusPrio() {
 		Operations.startOp('Cache : getFocusPrio');
 		Cache.enemiesPrio = [:];
 		Array<integer> enemies = [];
 		Array<integer> allies = [];
+		integer myId = getEntity();
+		
 		for (Leek entity in Cache.leeks) {
 			if (entity.type != ENTITY_LEEK || entity.life <= 0) continue;
 			if (entity.ally) {
 				push(allies, entity.id);
 			} else {
 				push(enemies, entity.id);
-				Cache.enemiesPrio[entity.id] = 1;
 			}
 		}
+		
+		// Pré-calcule la portée max de chaque allié (arme équipée ou arme la plus longue)
+		Map<integer, integer> allyRanges = [:];
 		for (integer ally in allies) {
-			Cache.leeks[ally].actions = Cache.leeks[ally].getActions([WEAPON_HEAVY_SWORD], Cache.leeks[ally].getCellAccess());
-		}
-		for (integer ally in allies) {
-			Map<integer, boolean> alreadyAdded = [:];
-			for (Action action in Cache.leeks[ally].actions) {
-				for (integer enemy in enemies) {
-					if (alreadyAdded[enemy]) break;
-					for (Target target in action.targets) {
-						if (alreadyAdded[enemy]) break;
-						if (target.leekId == enemy) {
-							Cache.enemiesPrio[enemy]++;
-							alreadyAdded[enemy] = true;
-						}
+			Leek a = Cache.leeks[ally];
+			if (a.weapon != null) {
+				allyRanges[ally] = a.weapon.maxRange;
+			} else if (a.weapons != null && count(a.weapons) > 0) {
+				integer maxRange = 0;
+				for (integer w in a.weapons) {
+					if (Cache.items[w] && Cache.items[w].maxRange > maxRange) {
+						maxRange = Cache.items[w].maxRange;
 					}
 				}
+				allyRanges[ally] = maxRange == 0 ? 12 : maxRange;
+			} else {
+				allyRanges[ally] = 12;
 			}
 		}
+		
+		// Portée du leek courant
+		integer myRange = 12;
+		if (Cache.leeks[myId].weapon != null) {
+			myRange = Cache.leeks[myId].weapon.maxRange;
+		}
+		
+		for (integer enemy in enemies) {
+			Leek e = Cache.leeks[enemy];
+			real score = 1.0;
+			
+			// 1. Menace (stats + ordre de jeu)
+			real threat = (e.strength + e.magic + e.agility) / 1500.0;
+			if (threat > 3) threat = 3;
+			
+			integer enemyOrder = Cache.entitiesOrder[enemy] != null ? Cache.entitiesOrder[enemy] : 100;
+			integer myOrder = Cache.entitiesOrder[myId] != null ? Cache.entitiesOrder[myId] : 100;
+			real orderThreat = enemyOrder < myOrder ? 1.0 : 0.3;
+			
+			// 2. Vulnérabilité (low life, low shield, pas de renvoi)
+			real lifeRatio = e.totalLife > 0 ? e.life / e.totalLife : 1;
+			real vuln = (1 - lifeRatio) * 2.0;
+			vuln += (1 - e.relativeShield / 100.0) * 0.5;
+			vuln -= e.absoluteShield / 500.0;
+			if (e.damageReturn > 0) {
+				vuln -= e.damageReturn / 100.0;
+			}
+			if (e.invulne) vuln = -2.0;
+			if (vuln < 0) vuln = 0;
+			
+			// 3. Accessibilité (combien d'alliés peuvent l'atteindre)
+			real access = 0;
+			for (integer ally in allies) {
+				Leek a = Cache.leeks[ally];
+				integer dist = getCellDistance(a.cell, e.cell);
+				integer reach = allyRanges[ally] + a.mp;
+				if (dist <= allyRanges[ally]) {
+					access += 1.0;
+					if (dist <= 2) access += 0.5;
+				} else if (dist <= reach) {
+					access += 0.3;
+				}
+			}
+			
+			// 4. Proximité avec mon leek
+			integer myDist = getCellDistance(Cache.leeks[myId].cell, e.cell);
+			if (myDist <= myRange) {
+				score += 1.0;
+				if (myDist <= 2) score += 0.5;
+			} else if (myDist <= myRange + Cache.leeks[myId].mp) {
+				score += 0.3;
+			}
+			
+			score += threat + orderThreat + vuln + access;
+			
+			Cache.enemiesPrio[enemy] = round(score);
+		}
+		
 		debug('enemies prio : ' + Cache.enemiesPrio);
 		Operations.stopOp('Cache : getFocusPrio');
 	}
-
 
 	static boolean isEntityPlayBefore(integer leekId1, integer leekId2, integer leekIdToPlay) {
     // Récupérer l'ordre de jeu des entités
