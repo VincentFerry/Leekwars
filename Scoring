@@ -468,21 +468,37 @@ class Scoring {
         return {prio : prio / item.cost, value: value};
     }
 
-    // marche pas à cause du target caster
     public static Object getPrioLifeDamage(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
-        if (Cache.leeks[entity].damageReturn > 75 || Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};
+        if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};
+
         var prio = 0;
-        var crit = Cache.leeks[leek.id].agility >= 900 ? CRITICAL_FACTOR : 1; // Trust
-		var value = Cache.leeks[leek.id].life * (((effect[1]*crit)/100) * (1 + Cache.leeks[leek.id].power / 100)) *
- (1 - Cache.leeks[entity].relativeShield / 100) - Cache.leeks[entity].absoluteShield;
+        var agility = Cache.leeks[leek.id].agility;
+        var critProb = agility >= 1000 ? 1.0 : (agility >= 100 ? (agility - 100) / 900.0 : 0.0);
+        var critFactor = 1.0 + critProb * (CRITICAL_FACTOR - 1.0);
+
+        // LIFE_DAMAGE : pourcentage de la vie du lanceur, amplifie par la puissance (BR) et le critique
+        var valueBeforeShield = Cache.leeks[leek.id].life * (effect[1] / 100.0) * areaMulti *
+                                (1 + Cache.leeks[leek.id].power / 100) * critFactor;
+
+        var value = valueBeforeShield * (1 - Cache.leeks[entity].relativeShield / 100) -
+                    Cache.leeks[entity].absoluteShield;
         value = max(0, value);
 
+        // Renvoi de dommages, sauf si cible = lanceur
+        if (entity != leek.id) {
+            prio -= valueBeforeShield * (Cache.leeks[entity].damageReturn / 100);
+        }
+
+        // Erosion (5% des degats subis, 15% si critique)
+        var erosion = value * (0.05 + critProb * 0.10);
+
         if (Cache.leeks[entity].ally) {
-            prio -= value * entityPrio / item.cost;
+            prio -= (value + erosion) * entityPrio;
         } else {
-            prio += value * entityPrio / item.cost;
-        }        
-		return {prio : prio, value: value};
+            prio += (value + erosion) * entityPrio;
+        }
+
+        return {prio : prio / item.cost, value: value};
     }
 
     public static Object getPrioAbsoluteShield(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
