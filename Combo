@@ -6,6 +6,8 @@ class Combo{
 		Operations.startOp('Combo : getComboFromActions');
 		//Leek leek = Cache.leeks[leekId];
 		if (count(actions) == 0) return [];
+		// Tri par rang d'ordre : buffs < debuffs < placement < dégâts < poison
+		actions = Combo.sortCombo(actions);
 		Array<Action> finalCombos = [];
 		integer cpt = 0;
 		integer countActions = count(actions);
@@ -14,6 +16,11 @@ class Combo{
 			while(cpt < countActions && Combo.isValideCombo(actions[cpt], leekId) && getOperations() < getMaxOperations() * 0.9)
 			{
 				if (actions[cpt].priority <= 15) {
+					cpt++;
+					continue;
+				}
+				// Anti-gaspillage : on ne joue pas sur des cibles déjà mortes dans la simulation
+				if (Combo.isTargetsDead(actions[cpt])) {
 					cpt++;
 					continue;
 				}
@@ -122,165 +129,148 @@ class Combo{
 
 		var cellIni = getCell();
 		Array<Action> sortedActions = arraySort(actions, function(Action a , Action b) {
-			// Item sur soit en prio
-			if (a.cellFrom == a.cellTo && b.cellFrom != b.cellTo && a.item.area == AREA_POINT) {
-				return -1;
-			}
-			if (a.cellFrom != a.cellTo && b.cellFrom == b.cellTo && b.item.area == AREA_POINT) {
-				return 1;
-			}
-
-			// Libération first
+			// Libération toujours en premier
 			if (a.item.id == CHIP_LIBERATION && b.item.id != CHIP_LIBERATION) {
 				return -1;
 			}
 			if (a.item.id != CHIP_LIBERATION && b.item.id == CHIP_LIBERATION) {
 				return 1;
 			}
-
-			// Calculer les distances par rapport à la position actuelle
-			/*integer distA = getCellDistance(cellIni, a.cellFrom);
-			integer distB = getCellDistance(cellIni, b.cellFrom);
-			if (distA < distB) {
+			// 1. Rang d'ordre : buffs < debuffs < placement < dégâts < poison
+			if (a.orderRank < b.orderRank) {
 				return -1;
-			} else if (distA == distB) {
-				return 0;
-			} else {
+			}
+			if (a.orderRank > b.orderRank) {
 				return 1;
-			}*/
+			}
+			// 2. Priorité
+			if (a.priority > b.priority) {
+				return -1;
+			}
+			if (a.priority < b.priority) {
+				return 1;
+			}
+			// 3. Item sur soit en prio (économie de PM)
+			if (a.cellFrom == a.cellTo && b.cellFrom != b.cellTo && a.item.area == AREA_POINT) {
+				return -1;
+			}
+			if (a.cellFrom != a.cellTo && b.cellFrom == b.cellTo && b.item.area == AREA_POINT) {
+				return 1;
+			}
+			// 4. Distance pour minimiser les déplacements
+			return getCellDistance(cellIni, a.cellFrom) - getCellDistance(cellIni, b.cellFrom);
 		});
 		
 		Operations.stopOp('Combo : sortCombo');
 		return sortedActions;
 	}
 	
-	/* @todo remettre adréaline et inversion juste pour les kills
-	 * Combos[99] = adréaline + inversion + épée lourde + machine gun, beaucoup de kills en plus car inversion jamais tester avant épée lourde */
-	static getCombos(Array<Action> actions) {
-		Operations.startOp('Combo : getCombos');
-		integer me = getEntity();
-		Cache.resetLeeks();
-		// Pourquoi je dois faire ça et le reset leeks ne fonctionne pas juste pour ça ???
-		for (integer itemId in arrayConcat(Cache.leeks[me].weapons, Cache.leeks[me].chips)) {
-			Cache.leeks[me].itemMaxUse[itemId] = getItemUses(itemId);
-		}
-		Cache.leeks[me].getChipsCooldown();
-		boolean canBoostArealine = false;
-		boolean alreadyAdrealine = false;
-		boolean chatimentReady = false;
-		if (Cache.leeks[me].chipsCooldown[CHIP_PUNISHMENT] == false) {
-			chatimentReady = true;
-		}
-		Map<integer, boolean> hardcodedCombos = [:];
-		if (Cache.leeks[me].chipsCooldown[CHIP_ADRENALINE] == false) {
-			for (Array buff in Cache.leeks[me].effects) {
-				if (CHIP_ADRENALINE == buff[5]) {
-					alreadyAdrealine = true;
-				}
-			}
-			if (alreadyAdrealine == false) {
-				canBoostArealine = true;
-			}
-		}
-		var tmpTp = canBoostArealine ? Cache.leeks[me].tp + 4 : Cache.leeks[me].tp;
-
-		Map<integer, Array> enemies = [:];
-		for (Leek entity in Cache.leeks) {
-			if (entity.life > 0 && !entity.ally && entity.type != ENTITY_BULB) {
-				enemies[entity.id] = [];
-			}
-		}
-
-		for (Action action in actions) {
-			//if (!mapContainsKey(Cache.chipsDamage, action.item.id) && !action.item.is_weapon) continue;
-			if (action.item.id == WEAPON_HEAVY_SWORD) {
-				for (Target target in action.targets) {
-					if (mapContainsKey(enemies, target.leekId)) {
-						push(enemies[target.leekId], action);
-					}
-				}
-			}
-		}
+	/* Combo de kill générique par ennemi (remplace les combos hardcodés épée lourde)
+	 * Construit un greedy ciblé sur un ennemi killable, simule, et vérifie le kill. */
+	static getKillCombos(integer leekId) {
+		Operations.startOp('Combo : getKillCombos');
+		// Pas de budget pour des combos de kill en fin de tour
+		if (getOperations() > getMaxOperations() * 0.6) return;
+		// Modes spéciaux : stratégie gérée par les modules dédiés
+		if (Cache.fightType == FIGHT_TYPE_BOSS || Cache.forceNoMove) return;
+		// Battle royale avec trop d'ennemis : trop coûteux
+		if (Cache.fightType == FIGHT_TYPE_BATTLE_ROYALE && count(getAliveEnemies()) > 8) return;
 		
-		// @todo check si le WEAPON_MACHINE_GUN fait partie de nos armes
-		for (integer enemyId : Array<Action> actionsOnEnemy  in enemies) {
-			// hardcoded combo
-			for (Action action in actionsOnEnemy) {
-				if (action.item.id == WEAPON_HEAVY_SWORD && !hardcodedCombos[enemyId]) {
-					//Action adrealine = new Action(Cache.leeks[me], Cache.items[CHIP_ADRENALINE], action.cellFrom, action.cellFrom);
-					Action inversion = new Action(Cache.leeks[me], Cache.items[CHIP_INVERSION], action.cellFrom, action.cellTo);
-					Action heavySword = new Action(Cache.leeks[me], Cache.items[WEAPON_HEAVY_SWORD], action.cellFrom, action.cellTo);
-					Action heavySwordInversion = new Action(Cache.leeks[me], Cache.items[WEAPON_HEAVY_SWORD], action.cellTo, action.cellFrom);
-					Action machineGun = new Action(Cache.leeks[me], Cache.items[WEAPON_MACHINE_GUN], action.cellFrom, action.cellTo);
-					Action machineGunInversion = new Action(Cache.leeks[me], Cache.items[WEAPON_MACHINE_GUN], action.cellTo, action.cellFrom);
-					Action katanaInversion = new Action(Cache.leeks[me], Cache.items[WEAPON_KATANA], action.cellTo, action.cellFrom);
-					Action katana = new Action(Cache.leeks[me], Cache.items[WEAPON_KATANA], action.cellFrom, action.cellTo);
-					Action chatiment = new Action(Cache.leeks[me], Cache.items[CHIP_PUNISHMENT], action.cellFrom, action.cellTo);
-					Action chatimentInversion = new Action(Cache.leeks[me], Cache.items[CHIP_PUNISHMENT], action.cellTo, action.cellFrom);
-					hardcodedCombos[enemyId] = true;
-					
-					if (Cache.leeks[me].chipsCooldown[CHIP_INVERSION] == false) {
-						Cache.leeks[me].combos[90 + enemyId] = [inversion, heavySwordInversion, machineGunInversion, machineGunInversion, machineGunInversion];
-						if (tmpTp >= 35) { // depends quelle weapon est équipé.
-							if (chatimentReady && Cache.leeks[me].life > 3000) {
-								Cache.leeks[me].combos[80 + enemyId] = [inversion, heavySwordInversion, chatimentInversion, katanaInversion, katanaInversion];
-							} else {
-								Cache.leeks[me].combos[80 + enemyId] = [inversion, heavySwordInversion, katanaInversion, katanaInversion, machineGunInversion];
-							}
-						} else {
-							Cache.leeks[me].combos[80 + enemyId] = [inversion, heavySwordInversion, katanaInversion, katanaInversion];
-						}
-					} else {
-						Cache.leeks[me].combos[90 + enemyId] = [heavySword, machineGun, machineGun, machineGun];
-						if (tmpTp >= 35) { // depends quelle weapon est équipé.
-							if (chatimentReady && Cache.leeks[me].life > 3000) {
-								Cache.leeks[me].combos[80 + enemyId] = [heavySword, chatiment, katana, katana];
-							} else {
-								Cache.leeks[me].combos[80 + enemyId] = [heavySword, katana, katana, machineGun];
-							}
-						} else {
-							Cache.leeks[me].combos[80 + enemyId] = [heavySword, katana, katana];
-						}
-					}
+		Leek leek = Cache.leeks[leekId];
+		if (isEmpty(leek.initActions)) return;
+		
+		// 1. Ennemis vivants (non bulbes)
+		Array<integer> enemiesAlives = [];
+		for (Leek enemy in Cache.initLeeks) {
+			if (!enemy.ally && enemy.life > 0 && enemy.type != ENTITY_BULB) {
+				push(enemiesAlives, enemy.id);
+			}
+		}
+		if (isEmpty(enemiesAlives)) return;
+		
+		// 2. Dégâts immédiats potentiels par ennemi (jets min, comme le scoring)
+		Map<integer, real> damageByEnemy = [:];
+		for (Action action in leek.initActions) {
+			if (!action.item.is_weapon && !mapContainsKey(Cache.chipsDamage, action.item.id)) continue;
+			for (Target target in action.targets) {
+				if (!inArray(enemiesAlives, target.leekId)) continue;
+				if (target.effectId != EFFECT_DAMAGE && target.effectId != EFFECT_LIFE_DAMAGE
+					&& target.effectId != EFFECT_AFTEREFFECT && target.effectId != EFFECT_NOVA_DAMAGE) continue;
+				damageByEnemy[target.leekId] = (damageByEnemy[target.leekId] == null ? 0 : damageByEnemy[target.leekId]) + target.value;
+			}
+		}
+		if (mapSize(damageByEnemy) == 0) return;
+		
+		// 3. Candidats : ennemis killables en un tour, triés par dégâts potentiels
+		Array<integer> candidates = [];
+		for (integer enemyId : var dmg in damageByEnemy) {
+			if (dmg >= Cache.initLeeks[enemyId].life) {
+				push(candidates, enemyId);
+			}
+		}
+		if (isEmpty(candidates)) return;
+		candidates = arraySort(candidates, function(a, b) {
+			if (damageByEnemy[a] > damageByEnemy[b]) return -1;
+			if (damageByEnemy[a] < damageByEnemy[b]) return 1;
+			return 0;
+		});
+		// Borne pour protéger le budget d'opérations
+		if (count(candidates) > 3) candidates = arraySlice(candidates, 0, 3);
+		
+		for (integer enemyId in candidates) {
+			if (getOperations() > getMaxOperations() * 0.8) break;
+			Cache.resetLeeks();
+			// Réinit des uses et cooldowns (resetLeeks ne suffit pas)
+			for (integer itemId in arrayConcat(Cache.leeks[leekId].weapons, Cache.leeks[leekId].chips)) {
+				Cache.leeks[leekId].itemMaxUse[itemId] = getItemUses(itemId);
+			}
+			Cache.leeks[leekId].getChipsCooldown();
+			
+			// Adrénaline pour amplifier le combo de kill
+			boolean canBoostAdrenaline = false;
+			if (Cache.leeks[leekId].chipsCooldown[CHIP_ADRENALINE] == false && inArray(Cache.leeks[leekId].chips, CHIP_ADRENALINE)) {
+				boolean alreadyAdrenaline = false;
+				for (Array buff in Cache.leeks[leekId].effects) {
+					if (CHIP_ADRENALINE == buff[5]) alreadyAdrenaline = true;
 				}
+				canBoostAdrenaline = !alreadyAdrenaline;
 			}
-			// All damage combos
-			if (isEmpty(actionsOnEnemy)) continue;
-			Array<Action> subActions = Action.sortActions(actionsOnEnemy, me);
-			if (canBoostArealine) {
-				Cache.leeks[me].tp += 4;
-			}
-			Cache.leeks[me].combos[10 + enemyId] = Combo.getComboFromActions(me, actionsOnEnemy);
-			if (canBoostArealine) {
-				unshift(Cache.leeks[me].combos[10 + enemyId], new Action(Cache.leeks[me], Cache.items[CHIP_ADRENALINE], Cache.leeks[me].cell, Cache.leeks[me].cell));
+			if (canBoostAdrenaline) {
+				Cache.leeks[leekId].tp += 4;
 			}
 			
+			// Actions de dégâts ciblant cet ennemi
+			Array<Action> enemyActions = [];
+			for (Action action in leek.initActions) {
+				if (!action.item.is_weapon && !mapContainsKey(Cache.chipsDamage, action.item.id)) continue;
+				for (Target target in action.targets) {
+					if (target.leekId == enemyId) {
+						push(enemyActions, action);
+						break;
+					}
+				}
+			}
+			if (isEmpty(enemyActions)) continue;
+			
+			Cache.leeks[leekId].combos[10 + enemyId] = Combo.getComboFromActions(leekId, enemyActions);
+			if (canBoostAdrenaline) {
+				unshift(Cache.leeks[leekId].combos[10 + enemyId], new Action(Cache.leeks[leekId], Cache.items[CHIP_ADRENALINE], Cache.leeks[leekId].cell, Cache.leeks[leekId].cell));
+			}
 			Cache.LeeksStates[10 + enemyId] = Cache.leeks[enemyId];
-			Cache.resetLeeks();
 		}
-
-		for (integer enemyId : boolean test in hardcodedCombos) {
-				var tmpObjHeavySword = Scoring.getPrioDamage(Cache.items[WEAPON_HEAVY_SWORD].effects[0], enemyId, Cache.leeks[me], 1, 1, Cache.items[WEAPON_HEAVY_SWORD]);
-				var tmpObjKatana = Scoring.getPrioDamage(Cache.items[WEAPON_KATANA].effects[0], enemyId, Cache.leeks[me], 1, 1, Cache.items[WEAPON_MACHINE_GUN]);
-				var tmpObjMachineGun = Scoring.getPrioDamage(Cache.items[WEAPON_MACHINE_GUN].effects[0], enemyId, Cache.leeks[me], 1, 1, Cache.items[WEAPON_MACHINE_GUN]);
-
-				// heavy sword / machine gun
-				Cache.leeks[enemyId].relativeShield -= 20;
-				Cache.leeks[enemyId].life -= tmpObjHeavySword.value;
-				Cache.leeks[enemyId].absoluteShield -= 60;
-				Cache.leeks[enemyId].life -= tmpObjMachineGun.value * 9;
-				Cache.LeeksStates[90 + enemyId] = Cache.leeks[enemyId];
-
-				Cache.resetLeeks();
-				// heavy sword / katana
-				Cache.leeks[enemyId].relativeShield -= 20;
-				Cache.leeks[enemyId].life -= tmpObjHeavySword.value;
-				Cache.leeks[enemyId].absoluteShield -= 60;
-				Cache.leeks[enemyId].life -= tmpObjKatana.value * 2;
-				Cache.LeeksStates[80 + enemyId] = Cache.leeks[enemyId];
+		// Pas de resetLeeks final : on garde le dernier état simulé (combos inclus)
+		Operations.stopOp('Combo : getKillCombos');
+	}
+	
+	/* Anti-gaspillage : vrai si toutes les cibles de l'action sont déjà mortes dans la simulation */
+	static boolean isTargetsDead(Action action) {
+		if (action.entityToRes != -1) return false; // résurrection
+		if (isEmpty(action.targets)) return false; // invocation
+		for (Target target in action.targets) {
+			if (Cache.leeks[target.leekId] == null) continue;
+			if (Cache.leeks[target.leekId].life > 0) return false;
 		}
-		
-		Operations.stopOp('Combo : getCombos');
+		return true;
 	}
 	
 	static integer evaluateCombos(integer leekId) {

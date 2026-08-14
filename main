@@ -103,12 +103,13 @@ function main() {
 	Array<Action> sortedActions = Combo.sortCombo(actions);
 	Cache.leeks[me].combos[0] = sortedActions;
 	Cache.LeeksStates[0] = clone(Cache.leeks);
-	//if (inArray(Cache.leeks[me].weapons, WEAPON_HEAVY_SWORD)) {
-	if (inArray(Cache.leeks[me].weapons, WEAPON_KATANA)) {
-		Cache.leeks[me].resetActions();
-		Combo.getCombos(Cache.leeks[me].actions);
-	}
 	integer comboId = Combo.evaluateCombos(me);
+	if (comboId == 0) {
+		// Pas de kill avec le combo général : on tente des combos ciblés par ennemi
+		Combo.getKillCombos(me);
+		Cache.leeks[me].combos[0] = sortedActions; // getKillCombos reset les leeks
+		comboId = Combo.evaluateCombos(me);
+	}
 	sortedActions = Cache.leeks[me].combos[comboId];
 	
 	// use Actions

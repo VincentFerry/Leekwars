@@ -6,6 +6,7 @@ class Action{
 	integer cellFrom
 	integer cellTo
 	real priority = 0.0;
+	integer orderRank = 4;
 	Array<Target> targets = [];
 	integer entityToRes = -1;
 	
@@ -15,6 +16,32 @@ class Action{
 		this.cellFrom = cellFrom;
 		this.cellTo = cellTo;
 		this.getPriority();
+		this.getOrderRank();
+	}
+	
+	public getOrderRank() {
+		/* Classe d'ordre d'exécution d'une action :
+		 * 0 : buffs / soins / boucliers / invocations (avant tout)
+		 * 1 : debuffs (vulnérabilité, debuff, entraves) — avant les dégâts
+		 * 2 : placement (push, attract, inversion)
+		 * 3 : dégâts immédiats
+		 * 4 : poison pur — en dernier, sur les survivants */
+		integer rank = 4;
+		for (Array effect in this.item.effects) {
+			integer type = effect[0];
+			if (mapContainsKey(Cache.effectBoost, type) || type == EFFECT_HEAL || type == EFFECT_BOOST_MAX_LIFE || type == EFFECT_RAW_HEAL || type == EFFECT_ABSOLUTE_SHIELD || type == EFFECT_RELATIVE_SHIELD || type == EFFECT_RAW_ABSOLUTE_SHIELD || type == EFFECT_RAW_RELATIVE_SHIELD || type == EFFECT_DAMAGE_RETURN || type == EFFECT_SUMMON || type == EFFECT_RESURRECT || type == EFFECT_ANTIDOTE || type == EFFECT_TELEPORT) {
+				rank = min(rank, 0);
+			} else if (type == EFFECT_VULNERABILITY || type == EFFECT_ABSOLUTE_VULNERABILITY || type == EFFECT_STEAL_ABSOLUTE_SHIELD || type == EFFECT_DEBUFF || type == EFFECT_TOTAL_DEBUFF || type == EFFECT_REMOVE_SHACKLES || type == EFFECT_SHACKLE_MP || type == EFFECT_SHACKLE_TP || type == EFFECT_SHACKLE_STRENGTH || type == EFFECT_SHACKLE_AGILITY || type == EFFECT_SHACKLE_MAGIC || type == EFFECT_SHACKLE_WISDOM) {
+				rank = min(rank, 1);
+			} else if (type == EFFECT_PUSH || type == EFFECT_ATTRACT || type == EFFECT_INVERT || type == EFFECT_REPEL) {
+				rank = min(rank, 2);
+			} else if (type == EFFECT_DAMAGE || type == EFFECT_LIFE_DAMAGE || type == EFFECT_AFTEREFFECT || type == EFFECT_NOVA_DAMAGE || type == EFFECT_KILL || type == EFFECT_STEAL_LIFE) {
+				rank = min(rank, 3);
+			} else if (type == EFFECT_POISON) {
+				rank = min(rank, 4);
+			}
+		}
+		this.orderRank = rank;
 	}
 	
 	public getPriority() {
