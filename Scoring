@@ -369,21 +369,26 @@ class Scoring {
 
     public static Object getPrioShackleTp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0};
-        if (effect[5] == 0) { // not cummulable item, should to it globally ?
+        // non cumulable si le modificateur stackable n'est pas présent
+        if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0) {
             for (Array effectEntity in Cache.leeks[entity].effects) {
                 if (effectEntity[5] == item.id) {
                     return {prio : 0, value : 0};
                 }
             }
         }
-        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
+        // moyenne des jets pour éviter que le minimum tombe à 0 avec round()
+        var baseValue = (effect[1] + effect[2]) / 2.0;
+        var value = round(baseValue * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
         if (value == 0) return {prio: 0, value:0};
         if (Cache.leeks[entity].tp <= 0) return {prio : 0, value: value};
 
         // Plus on retire une grande proportion de TP, plus c'est impactant
         var totalShackled = value * effect[3];
         real scarcity = totalShackled / Cache.leeks[entity].tp;
-        real impact = totalShackled * (1 + scarcity);
+        real lockBonus = (value >= Cache.leeks[entity].tp) ? 1.0 + scarcity : 0.0;
+        real resourceWeight = 40.0; // un TP vaut environ 40 pts de dégât
+        real impact = totalShackled * (1 + scarcity + lockBonus) * resourceWeight;
 
         var prio = 0;
         if (Cache.leeks[entity].ally) {
@@ -396,14 +401,17 @@ class Scoring {
 
     public static Object getPrioShackleMp(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0}; 
-        if (effect[5] == 0) { // non cumulable item, should to it globally ?
+        // non cumulable si le modificateur stackable n'est pas présent
+        if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0) {
             for (Array effectEntity in Cache.leeks[entity].effects) {
                 if (effectEntity[5] == item.id) {
                     return {prio : 0, value : 0};
                 }
             }
         }
-        var value = round(effect[1] * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
+        // moyenne des jets pour éviter que le minimum tombe à 0 avec round()
+        var baseValue = (effect[1] + effect[2]) / 2.0;
+        var value = round(baseValue * areaMulti * (1 + Cache.leeks[leek.id].magic / 100));
         if (value == 0) return {prio: 0, value:0};
         if (Cache.leeks[entity].mp <= 0) return {prio : 0, value: value};
 
@@ -411,8 +419,9 @@ class Scoring {
         // Si on retire au moins autant que les MP max, on bloque les deplacements
         var totalShackled = value * effect[3];
         real scarcity = totalShackled / Cache.leeks[entity].mp;
-        real lockBonus = (value >= Cache.leeks[entity].mp) ? scarcity : 0.0;
-        real impact = totalShackled * (1 + scarcity + lockBonus);
+        real lockBonus = (value >= Cache.leeks[entity].mp) ? 1.0 + scarcity : 0.0;
+        real resourceWeight = 60.0; // un MP vaut plus qu'un TP
+        real impact = totalShackled * (1 + scarcity + lockBonus) * resourceWeight;
 
         var prio = 0;
         if (Cache.leeks[entity].ally) {
