@@ -248,15 +248,12 @@ class Scoring {
             value = maxHeal;
         }
 
-        var multiplicatorHeal = (Cache.leeks[entity].life < Cache.leeks[entity].totalLife / 2) ? 2 : 1;
+        var multiplicatorHeal = (Cache.leeks[entity].life < Cache.leeks[entity].totalLife / 2) ? 3 : 1;
     
 		if (!Cache.leeks[entity].ally) {
-			prio -= effect[3] == 0 ? value * multiplicatorHeal : value * multiplicatorHeal * effect[3] * 1;
+			prio -= effect[3] == 0 ? value * multiplicatorHeal : value * multiplicatorHeal * effect[3];
 		} else {
-			prio += effect[3] == 0 ? value : value * effect[3];
-			if (Cache.leeks[entity].life < Cache.leeks[entity].totalLife / 2) {
-				prio *= 3;
-			}
+			prio += effect[3] == 0 ? value * multiplicatorHeal : value * multiplicatorHeal * effect[3];
 		}
 		return {prio : prio / item.cost, value: value};
     }
@@ -333,8 +330,8 @@ class Scoring {
 
     public static Object getPrioStealAbsoluteShield(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
         var prio = 0;
-        prio += effect[1] * effect[3] / item.cost;
-        return {prio : prio, value : effect[1]}
+        prio += effect[1] * effect[3] * entityPrio;
+        return {prio : prio / item.cost, value : effect[1]};
     }
 
     public static Object getPrioVulnerability(Array effect, integer entity, Leek leek, real entityPrio, real areaMulti, Item item) {
@@ -346,7 +343,7 @@ class Scoring {
         if (Cache.leeks[entity].type == ENTITY_BULB) return {prio : 0, value: 0}; 
         var prio = 0;
         if (Cache.leeks[entity].ally) {
-            prio -= (effect[1] * RELATIVE * VULNERABILITY * effect[3]) / item.cost;
+            prio -= (effect[1] * RELATIVE * VULNERABILITY * entityPrio * areaMulti * effect[3]) / item.cost;
         } else {
             prio += (effect[1] * RELATIVE * VULNERABILITY * entityPrio * areaMulti * effect[3]) / item.cost;
         }
