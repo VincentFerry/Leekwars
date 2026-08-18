@@ -69,7 +69,7 @@ class BoardState {
 
 	// Applique une BSAction et renvoie un token d'undo (deltas)
 	// BSAction : {leekId, itemId, cellFrom, cellTo, kind}
-	// kind : 0=attack/buff, 1=move
+	// kind : KIND_ATTACK=0 | KIND_BUFF=1 | KIND_MOVE=2
 	Object apply(Object a) {
 		integer lid    = a.leekId;
 		integer itemId = a.itemId;
@@ -99,7 +99,7 @@ class BoardState {
 		this.tp[lid] -= weaponCost;
 
 		// Coût MP (déplacement vers cellFrom)
-		if (a.cellFrom != this.cell[lid] && a.kind != 1) {
+		if (a.cellFrom != this.cell[lid] && a.kind != ActionGenerator.KIND_MOVE) {
 			integer? pathCost = getPathLength(this.cell[lid], a.cellFrom);
 			if (pathCost) {
 				this.mp[lid] -= pathCost;
@@ -118,7 +118,7 @@ class BoardState {
 			this.chipCD[lid][itemId] = true;
 		}
 
-		if (a.kind == 1) {
+		if (a.kind == ActionGenerator.KIND_MOVE) {
 			// Action de déplacement pur (jump/téléport)
 			token.movedEntities[lid] = this.cell[lid];
 			this.cellToEntity[this.cell[lid]] = -1;
