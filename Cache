@@ -484,7 +484,7 @@ class Cache {
 			Leek a = Cache.leeks[ally];
 			if (a.weapon != null) {
 				allyRanges[ally] = a.weapon.maxRange;
-			} else if (a.weapons != null && count(a.weapons) > 0) {
+			} else if (count(a.weapons) > 0) {
 				integer maxRange = 0;
 				for (integer w in a.weapons) {
 					if (Cache.items[w] && Cache.items[w].maxRange > maxRange) {

@@ -115,7 +115,9 @@ class BoardState {
 			this.mp[lid] -= item.cost; // coût du jump en TP déjà déduit
 		} else {
 			// Action d'attaque/buff : calcul d'impact sur la zone
-			Array<integer> areaCells = item.getItemEffectiveArea(a.cellFrom, a.cellTo);
+			Array<integer> areaCells = item.is_weapon
+				? getWeaponEffectiveArea(item.id, a.cellTo, a.cellFrom)
+				: getChipEffectiveArea(item.id, a.cellTo, a.cellFrom);
 			for (integer areaCell in areaCells) {
 				integer targetId = this.entityOn(areaCell);
 				if (targetId == -1) continue;

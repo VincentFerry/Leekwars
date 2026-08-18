@@ -80,7 +80,7 @@ class Planner {
 				}
 
 				// Annuler les actions du noeud (ordre inverse)
-				Array tokensRev = arrayReverse(tokens);
+				Array tokensRev = reverse(tokens);
 				for (Object tok in tokensRev) {
 					s.undo(tok);
 				}

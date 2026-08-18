@@ -22,11 +22,11 @@ include('Planner');
 include('Sequencer');
 include('Executor');
 
-// Flag A/B : true = nouveau pipeline (Planner+Sequencer+Executor)
-//            false = ancien pipeline (Combo glouton)
-boolean USE_NEW_PIPELINE = false;
-
 function main() {
+	// Flag A/B : true = nouveau pipeline (Planner+Sequencer+Executor)
+	//            false = ancien pipeline (Combo glouton)
+	boolean USE_NEW_PIPELINE = false;
+
 	integer me = getEntity();
 
 	// Set Cache
