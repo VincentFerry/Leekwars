@@ -13,6 +13,15 @@ class ScoringConfig {
 	static real W_MP                = 60.0;
 	static real W_DAMAGE_RETURN     = 1.0;
 
+	// Poids des buffs de stats simulés (récompense pour puces de boost)
+	// Calibrés pour que boost+attaque > attaque seule sans être trop agressifs
+	static real W_BUFF_STRENGTH   = 3.0;   // 1 pt force = ~1% dégâts en plus -> fort impact
+	static real W_BUFF_AGILITY    = 0.5;   // critique : impact secondaire
+	static real W_BUFF_MAGIC      = 2.5;   // similaire force mais magie
+	static real W_BUFF_RESISTANCE = 1.5;   // défensif : modéré
+	static real W_BUFF_WISDOM     = 0.4;   // vol de vie : secondaire
+	static real W_BUFF_SCIENCE    = 1.0;   // nova : modéré
+
 	// Poids tactiques
 	static real W_AOE_EXTRA_TARGET  = 1.0;
 	static real W_PUSH_INTO_CLUSTER = 50.0;
@@ -61,6 +70,12 @@ class ScoringConfig {
 		if (key == "W_TP")                return ScoringConfig.W_TP;
 		if (key == "W_MP")                return ScoringConfig.W_MP;
 		if (key == "W_DAMAGE_RETURN")     return ScoringConfig.W_DAMAGE_RETURN;
+		if (key == "W_BUFF_STRENGTH")     return ScoringConfig.W_BUFF_STRENGTH;
+		if (key == "W_BUFF_AGILITY")      return ScoringConfig.W_BUFF_AGILITY;
+		if (key == "W_BUFF_MAGIC")        return ScoringConfig.W_BUFF_MAGIC;
+		if (key == "W_BUFF_RESISTANCE")   return ScoringConfig.W_BUFF_RESISTANCE;
+		if (key == "W_BUFF_WISDOM")       return ScoringConfig.W_BUFF_WISDOM;
+		if (key == "W_BUFF_SCIENCE")      return ScoringConfig.W_BUFF_SCIENCE;
 		if (key == "W_AOE_EXTRA_TARGET")  return ScoringConfig.W_AOE_EXTRA_TARGET;
 		if (key == "W_PUSH_INTO_CLUSTER") return ScoringConfig.W_PUSH_INTO_CLUSTER;
 		if (key == "W_SURVIVAL")          return ScoringConfig.W_SURVIVAL;

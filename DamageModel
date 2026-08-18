@@ -36,11 +36,11 @@ class DamageModel {
 
 	// Point d'entrée unifié pour les dégâts EFFECT_DAMAGE
 	// Renvoie {dealt, erosion, steal, returned}
-	static Object resolveDamage(Array effect, Leek caster, Leek target, real areaMulti) {
-		real p       = DamageModel.critProb(caster.agility);
+	static Object resolveDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusStrength, real bonusAgility) {
+		real p       = DamageModel.critProb(caster.agility + bonusAgility);
 		real cf      = DamageModel.critFactor(p);
 		real rawBase = effect[1] * areaMulti
-		               * (1.0 + caster.strength / 100.0)
+		               * (1.0 + (caster.strength + bonusStrength) / 100.0)
 		               * (1.0 + caster.power / 100.0);
 		real rawCrit = rawBase * cf;
 		real dealt   = DamageModel.applyShields(rawCrit, target.relativeShield, target.absoluteShield);
@@ -52,8 +52,8 @@ class DamageModel {
 	}
 
 	// Résolution pour EFFECT_LIFE_DAMAGE (% de la vie du lanceur)
-	static Object resolveLifeDamage(Array effect, Leek caster, Leek target, real areaMulti) {
-		real p      = DamageModel.critProb(caster.agility);
+	static Object resolveLifeDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusAgility) {
+		real p      = DamageModel.critProb(caster.agility + bonusAgility);
 		real cf     = DamageModel.critFactor(p);
 		real rawCrit = caster.life * (effect[1] / 100.0) * areaMulti
 		               * (1.0 + caster.power / 100.0) * cf;
@@ -64,8 +64,8 @@ class DamageModel {
 	}
 
 	// Résolution pour EFFECT_NOVA_DAMAGE (% vie nova)
-	static Object resolveNovaDamage(Array effect, Leek caster, Leek target, real areaMulti) {
-		real value = effect[1] * areaMulti * (1.0 + caster.science / 100.0);
+	static Object resolveNovaDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusScience) {
+		real value = effect[1] * areaMulti * (1.0 + (caster.science + bonusScience) / 100.0);
 		real dealt = value < (target.totalLife - target.life) ? value : (target.totalLife - target.life);
 		if (dealt < 0.0) dealt = 0.0;
 		return {dealt: dealt, erosion: 0.0, steal: 0.0, returned: 0.0};

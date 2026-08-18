@@ -9,6 +9,9 @@ class BoardState {
 	Map<integer, Map<integer, integer>> usedItem = [:];
 	// cooldowns simulés : [entityId][itemId] = true si en CD
 	Map<integer, Map<integer, boolean>> chipCD  = [:];
+	// buffs de stats simulés : [entityId][statName] = points ajoutés ce tour
+	// statName in {strength, agility, magic, resistance, wisdom, science}
+	Map<integer, Map<string, real>> statBuff = [:];
 	integer selfId = -1;
 	// index inverse cellule -> entityId (-1 si vide)
 	Map<integer, integer> cellToEntity = [:];
@@ -27,6 +30,7 @@ class BoardState {
 			s.mp[id]        = leek.mp;
 			s.usedItem[id]  = [:];
 			s.chipCD[id]    = [:];
+			s.statBuff[id]  = [:];
 			for (integer itemId in arrayConcat(leek.weapons, leek.chips)) {
 				s.usedItem[id][itemId] = leek.itemMaxUse[itemId] != null ? leek.itemMaxUse[itemId] : 0;
 			}
@@ -46,6 +50,13 @@ class BoardState {
 	integer entityOn(integer c) {
 		if (mapContainsKey(this.cellToEntity, c)) return this.cellToEntity[c];
 		return -1;
+	}
+
+	// Points de buff sur une stat (0 si aucun)
+	real buffOf(integer id, string stat) {
+		if (this.statBuff[id] == null) return 0.0;
+		if (this.statBuff[id][stat] == null) return 0.0;
+		return this.statBuff[id][stat];
 	}
 
 	// La cellule est-elle accessible depuis fromCell avec mp dispo ?
@@ -75,6 +86,7 @@ class BoardState {
 			prevUsed  : (this.usedItem[lid][itemId] != null ? this.usedItem[lid][itemId] : 0),
 			prevCD    : (this.chipCD[lid][itemId] != null ? this.chipCD[lid][itemId] : false),
 			movedEntities : [:],
+			prevBuff  : [:],
 		};
 
 		Item item = Cache.items[itemId];
@@ -132,10 +144,14 @@ class BoardState {
 				}
 
 				real areaMulti = Carte.areaMultiplicator[getCellDistance(areaCell, a.cellTo)];
+				// Buffs de stats simulés du lanceur (steroïde, etc.)
+				real bStr = this.buffOf(lid, 'strength');
+				real bAgi = this.buffOf(lid, 'agility');
+				real bSci = this.buffOf(lid, 'science');
 				for (Array effect in item.effects) {
 					integer eff = effect[0];
 					if (eff == EFFECT_DAMAGE) {
-						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti);
+						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti, bStr, bAgi);
 						this.life[targetId] -= res.dealt;
 						// vol de vie
 						if (res.steal > 0) {
@@ -143,10 +159,10 @@ class BoardState {
 							this.life[lid] += res.steal;
 						}
 					} else if (eff == EFFECT_LIFE_DAMAGE) {
-						Object res = DamageModel.resolveLifeDamage(effect, caster, target, areaMulti);
+						Object res = DamageModel.resolveLifeDamage(effect, caster, target, areaMulti, bAgi);
 						this.life[targetId] -= res.dealt;
 					} else if (eff == EFFECT_NOVA_DAMAGE) {
-						Object res = DamageModel.resolveNovaDamage(effect, caster, target, areaMulti);
+						Object res = DamageModel.resolveNovaDamage(effect, caster, target, areaMulti, bSci);
 						// nova réduit totalLife (simulé via absShield proxy, assez pour scoring)
 					} else if (eff == EFFECT_HEAL || eff == EFFECT_RAW_HEAL) {
 						real heal = effect[1] * areaMulti * (1.0 + caster.wisdom / 100.0);
@@ -185,6 +201,18 @@ class BoardState {
 						this.tp[targetId] += effect[1];
 					} else if (eff == EFFECT_BUFF_MP || eff == EFFECT_RAW_BUFF_MP) {
 						this.mp[targetId] += effect[1];
+					} else if (eff == EFFECT_BUFF_STRENGTH || eff == EFFECT_RAW_BUFF_STRENGTH) {
+						this.applyStatBuff(token, targetId, 'strength', effect, eff == EFFECT_BUFF_STRENGTH, areaMulti, caster);
+					} else if (eff == EFFECT_BUFF_AGILITY || eff == EFFECT_RAW_BUFF_AGILITY) {
+						this.applyStatBuff(token, targetId, 'agility', effect, eff == EFFECT_BUFF_AGILITY, areaMulti, caster);
+					} else if (eff == EFFECT_RAW_BUFF_MAGIC) {
+						this.applyStatBuff(token, targetId, 'magic', effect, false, areaMulti, caster);
+					} else if (eff == EFFECT_BUFF_RESISTANCE || eff == EFFECT_RAW_BUFF_RESISTANCE) {
+						this.applyStatBuff(token, targetId, 'resistance', effect, eff == EFFECT_BUFF_RESISTANCE, areaMulti, caster);
+					} else if (eff == EFFECT_BUFF_WISDOM || eff == EFFECT_RAW_BUFF_WISDOM) {
+						this.applyStatBuff(token, targetId, 'wisdom', effect, eff == EFFECT_BUFF_WISDOM, areaMulti, caster);
+					} else if (eff == EFFECT_RAW_BUFF_SCIENCE) {
+						this.applyStatBuff(token, targetId, 'science', effect, false, areaMulti, caster);
 					}
 					// Les autres effets (shackle, poison, etc.) ne modifient pas
 					// les champs trackés par BoardState ; ignorés pour la simulation
@@ -193,6 +221,20 @@ class BoardState {
 		}
 
 		return token;
+	}
+
+	// Ajoute un buff de stat en sauvegardant la valeur précédente dans le token
+	// scaleScience : true pour les buffs non-raw (multipliés par la science du lanceur)
+	void applyStatBuff(Object token, integer targetId, string stat, Array effect, boolean scaleScience, real areaMulti, Leek caster) {
+		if (this.statBuff[targetId] == null) this.statBuff[targetId] = [:];
+		real val = effect[1] * areaMulti;
+		if (scaleScience) val *= (1.0 + caster.science / 100.0);
+		if (token.prevBuff[targetId] == null) token.prevBuff[targetId] = [:];
+		if (token.prevBuff[targetId][stat] == null) {
+			token.prevBuff[targetId][stat] = this.statBuff[targetId][stat] != null ? this.statBuff[targetId][stat] : 0.0;
+		}
+		if (this.statBuff[targetId][stat] == null) this.statBuff[targetId][stat] = 0.0;
+		this.statBuff[targetId][stat] += val;
 	}
 
 	// Annule un apply via son token
@@ -226,6 +268,13 @@ class BoardState {
 		}
 		for (integer targetId : real prevAbs in token.prevAbsSh) {
 			this.absShield[targetId] = prevAbs;
+		}
+
+		// Restaurer les buffs de stats
+		for (integer targetId : Map<string, real> prevStats in token.prevBuff) {
+			for (string stat : real prevVal in prevStats) {
+				this.statBuff[targetId][stat] = prevVal;
+			}
 		}
 
 		// Restaurer positions des entités déplacées

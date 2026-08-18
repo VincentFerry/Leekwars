@@ -347,7 +347,7 @@ class Carte {
 	}
 	
 	static Array<integer> getCellToJump() {
-		Operations.startOp('Carte : getCellToJump');
+		OpBudget.begin('Carte.getCellToJump');
 		Array<integer> obstacles = getObstacles();
 		integer myId = getEntity();
 		/*for (Leek entity in Cache.leeks) {
@@ -379,7 +379,7 @@ class Carte {
 			}
 		}
 		res = arrayUnique(res);
-		Operations.stopOp('Carte : getCellToJump');
+		OpBudget.end('Carte.getCellToJump');
 		return res;
 	}
 	
@@ -422,7 +422,7 @@ class Carte {
 	}*/
 	/* Ne renvoi pas toutes les cellules mais c'est low cost */
 	static Map<integer, integer> cellAccessJump(Leek leek) {
-		Operations.startOp('Carte : cellAccessJump');
+		OpBudget.begin('Carte.cellAccessJump');
 		// Vérification des conditions pour utiliser la puce de saut
 		if (!Cache.leeks[leek.id].chipsCooldown || Cache.leeks[leek.id].chipsCooldown[CHIP_JUMP] == true || !inArray(Cache.leeks[leek.id].chips, CHIP_JUMP)) {
 			return leek.cellAccessBase;
@@ -443,7 +443,7 @@ class Carte {
 			}
 		}
 
-		Operations.stopOp('Carte : cellAccessJump');
+		OpBudget.end('Carte.cellAccessJump');
 		return res;
 	}
 	
@@ -490,7 +490,7 @@ class Carte {
 	 * Mode économie d'opérations pour plus de stats d'items
 	 **/
 	static integer getCellNearAlly(integer leekId) {
-		Operations.startOp('Carte : getCellNearAlly');
+		OpBudget.begin('Carte.getCellNearAlly');
 		Map<integer,integer> cellAccess = Carte.getCellulesAccessibles(getCell(leekId), getMP(leekId));
 		integer cellule;
 		integer? distance;
@@ -523,14 +523,14 @@ class Carte {
 		}
 		debug('safe cell : ' + cellule);
 		debug('center allies : ' + cellToGo);
-		Operations.startOp('Carte : getCellNearAlly');
+		OpBudget.end('Carte.getCellNearAlly');
 		return cellule;
 	}
 	
 	/* @todo comment faire en mode solo ou battle royale avec 5M d'opé ?
 	 * Crée la safeMap au fur et à mesure quand on teste la cellule ? */
 	/*static safeMap() {
-		Operations.startOp('Carte : safeMap');
+		OpBudget.begin('Carte.safeMap');
 		Map<integer,integer> safeMap = [:];
 		integer maxDistanceForSafeMap = 12;
 		Array allLeeks = arrayConcat(getAllies(), getEnemies());
@@ -571,7 +571,7 @@ class Carte {
 			markText(cell, danger, 64);
 		}
 		pause();
-		Operations.stopOp('Carte : safeMap');
+		OpBudget.end('Carte.safeMap');
 	}*/
 
 	
@@ -601,7 +601,7 @@ class Carte {
 	 * Danger de 1 à 7 ou 1 est le plus faible
 	 */
 	static Map<integer, integer> lightSafeMap(integer leekId) {
-		Operations.startOp('Carte : light safeMap');
+		OpBudget.begin('Carte.lightSafeMap');
 		Leek leek = Cache.leeks[leekId];
 		Array<integer> leeks = [];
 		for (Leek entity in Cache.leeks) {
@@ -657,11 +657,11 @@ class Carte {
 				value += 1;
 			}
 		}
-		Operations.stopOp('Carte : light safeMap');
+		OpBudget.end('Carte.lightSafeMap');
 	}
 	
 	static integer getOneCellMap(integer leekId) {
-		Operations.startOp('Carte : getOneCellSafeMap');
+		OpBudget.begin('Carte.getOneCellMap');
 		if (Cache.oneCellSafeMap) return Cache.oneCellSafeMap;
 		Array<integer> allies = [];
 		for(Leek leek in Cache.leeks) {
@@ -732,7 +732,7 @@ class Carte {
 			}
 		}
 		Cache.oneCellSafeMap = cellMinDanger;
-		Operations.stopOp('Carte : getOneCellSafeMap');
+		OpBudget.end('Carte.getOneCellMap');
 		return cellMinDanger;
 	}
 

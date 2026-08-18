@@ -3,15 +3,12 @@ include('Target');
 include('Action');
 include('BossFenouille');
 include('Leek');
-include('Scoring');
 include('ScoringTest');
 include('Item');
 include('Weapon');
 include('Chip');
 include('Cache');
-include('Combo');
 include('Potiron');
-include('Operations');
 include('OpBudget');
 include('ScoringConfig');
 include('DamageModel');
@@ -23,10 +20,6 @@ include('Sequencer');
 include('Executor');
 
 function main() {
-	// Flag A/B : true = nouveau pipeline (Planner+Sequencer+Executor)
-	//            false = ancien pipeline (Combo glouton)
-	boolean USE_NEW_PIPELINE = false;
-
 	integer me = getEntity();
 
 	// Set Cache
@@ -109,63 +102,27 @@ function main() {
 	}
 	
 	// Set up leek.actions
-	Array<integer> items = arrayConcat(Cache.leeks[me].weapons, Cache.leeks[me].chips);
 
-	if (USE_NEW_PIPELINE) {
-		// ===== NOUVEAU PIPELINE =====
-		OpBudget.begin('Pipeline');
+	// ===== PIPELINE =====
+	OpBudget.begin('Pipeline');
 
-		BoardState boardState = BoardState.fromCache();
-		Array plan = Planner.plan(boardState, me);
-		Array sortedPlan = Sequencer.sort(plan, me);
-		Executor.run(me, sortedPlan);
+	BoardState boardState = BoardState.fromCache();
+	Array plan = Planner.plan(boardState, me);
+	Array sortedPlan = Sequencer.sort(plan, me);
+	Executor.run(me, sortedPlan);
 
-		// Filet de sécurité TP restant
-		if (getTP() >= 3 && !Cache.forceNoMove && OpBudget.canContinue(0.10)) {
-			debug('additionnal actions (new pipeline)');
-			Cache.resetCache();
-			Cache.updateCache();
-			BoardState boardState2 = BoardState.fromCache();
-			Array plan2 = Planner.plan(boardState2, me);
-			Array sortedPlan2 = Sequencer.sort(plan2, me);
-			Executor.run(me, sortedPlan2);
-		}
-
-		OpBudget.end('Pipeline');
-	} else {
-		// ===== ANCIEN PIPELINE (référence A/B) =====
-		Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Cache.leeks[me].getCellAccess());
-		Cache.leeks[me].initActions = clone(Cache.leeks[me].actions);
-		Array<Action> actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
-		Array<Action> sortedActions = Combo.sortCombo(actions);
-		Cache.leeks[me].combos[0] = sortedActions;
-		Cache.LeeksStates[0] = clone(Cache.leeks);
-		if (inArray(Cache.leeks[me].weapons, WEAPON_KATANA)) {
-			Cache.leeks[me].resetActions();
-			Combo.getCombos(Cache.leeks[me].actions);
-		}
-		integer comboId = Combo.evaluateCombos(me);
-		sortedActions = Cache.leeks[me].combos[comboId];
-
-		for (Action action in sortedActions) {
-			debug(action);
-			Action.useAction(me, action);
-		}
-
-		// prevent bug or tp left with critical i can't simule it before
-		if (getTP() >= 3 && !Cache.forceNoMove) {
-			debug('additionnal actions');
-			Cache.resetCache();
-			Cache.updateCache();
-			Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Carte.getCellulesAccessibles(getCell(), getMP()));
-			actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
-			sortedActions = Combo.sortCombo(actions);
-			for (Action action in sortedActions) {
-				Action.useAction(me, action);
-				debug(action);
-			}
-		}
+	// Filet de sécurité TP restant
+	if (getTP() >= 3 && !Cache.forceNoMove && OpBudget.canContinue(0.10)) {
+		debug('additionnal actions');
+		Cache.resetCache();
+		Cache.updateCache();
+		BoardState boardState2 = BoardState.fromCache();
+		Array plan2 = Planner.plan(boardState2, me);
+		Array sortedPlan2 = Sequencer.sort(plan2, me);
+		Executor.run(me, sortedPlan2);
 	}
+
+	OpBudget.end('Pipeline');
 	
 	// Move
 	if (getMP() > 0 && !Cache.forceNoMove && getOperations() < getMaxOperations() * 0.8) {

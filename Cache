@@ -120,14 +120,14 @@ class Cache {
 		Cache.invocTactic = null;
 	}
 	static resetLeeks() {
-		Operations.startOp('Cache : resetLeeks');
+		OpBudget.begin('Cache.resetLeeks');
         for (Leek leek in Cache.initLeeks) {
             Cache.leeks[leek.id] = clone(Cache.initLeeks[leek.id]);
         }
-		Operations.stopOp('Cache : resetLeeks');
+		OpBudget.end('Cache.resetLeeks');
     }
 	static getItems() {
-		Operations.startOp('Cache : getItems');
+		OpBudget.begin('Cache.getItems');
 		for (integer itemId in getAllChips()) {
 			Chip item = new Chip(itemId);
 			Cache.items[itemId] = item;
@@ -136,10 +136,10 @@ class Cache {
 			Weapon item = new Weapon(itemId);
 			Cache.items[itemId] = item;
 		}
-		Operations.stopOp('Cache : getItems');
+		OpBudget.end('Cache.getItems');
 	}
 	static getLeeks() {
-		Operations.startOp('Cache : getLeeks');
+		OpBudget.begin('Cache.getLeeks');
 		Array<integer> allLeeks = arrayConcat(getAllies(), getEnemies());
 		Cache.leeks = [:];
 		for (integer leekId in allLeeks) {
@@ -148,7 +148,7 @@ class Cache {
 			Cache.leeks[leekId] = leek;
 			Cache.initLeeks[leekId] = clone(leek);
 		}
-		Operations.stopOp('Cache : getLeeks');
+		OpBudget.end('Cache.getLeeks');
 	}	
 	static Map<integer,boolean> getChipsDamgae() {
 		Map<integer,boolean> res = [:];
@@ -293,14 +293,14 @@ class Cache {
 	}
 
 	static getAreaCell() {
-		Operations.startOp('Cache : getAreaCell');
+		OpBudget.begin('Cache.getAreaCell');
 		for (integer cell = 0; cell < 613; cell++) {
 			if (getCellContent(cell) == CELL_OBSTACLE) continue;
 			Cache.areaCell3[cell] = Carte.areaLeek(cell, 3);
 			Cache.areaCell2[cell] = Carte.areaLeek(cell, 2);
 			Cache.areaCell1[cell] = Carte.areaLeek(cell, 1);
 		}
-		Operations.stopOp('Cache : getAreaCell');
+		OpBudget.end('Cache.getAreaCell');
 	}
 	
 	static getMeta() {
@@ -463,7 +463,7 @@ class Cache {
 	}
 
 	static getFocusPrio() {
-		Operations.startOp('Cache : getFocusPrio');
+		OpBudget.begin('Cache.getFocusPrio');
 		Cache.enemiesPrio = [:];
 		Array<integer> enemies = [];
 		Array<integer> allies = [];
@@ -555,7 +555,7 @@ class Cache {
 		}
 		
 		debug('enemies prio : ' + Cache.enemiesPrio);
-		Operations.stopOp('Cache : getFocusPrio');
+		OpBudget.end('Cache.getFocusPrio');
 	}
 
 	static boolean isEntityPlayBefore(integer leekId1, integer leekId2, integer leekIdToPlay) {

@@ -30,6 +30,18 @@ class Evaluator {
 				score += s.mp[id] * ScoringConfig.W_MP * 0.1;
 			}
 
+			// Buffs de stats simulés (alliés uniquement) : valorise les puces de boost
+			// Gate : seulement si le leek a encore au moins 2 TP (peut attaquer après)
+			// et qu'il existe au moins un ennemi en vie (buff stérile sinon).
+			if (leek.ally && s.statBuff[id] != null && s.tp[id] >= 2 && !isEmpty(Cache.enemiesTargets)) {
+				score += s.buffOf(id, 'strength')   * ScoringConfig.W_BUFF_STRENGTH;
+				score += s.buffOf(id, 'agility')    * ScoringConfig.W_BUFF_AGILITY;
+				score += s.buffOf(id, 'magic')      * ScoringConfig.W_BUFF_MAGIC;
+				score += s.buffOf(id, 'resistance') * ScoringConfig.W_BUFF_RESISTANCE;
+				score += s.buffOf(id, 'wisdom')     * ScoringConfig.W_BUFF_WISDOM;
+				score += s.buffOf(id, 'science')    * ScoringConfig.W_BUFF_SCIENCE;
+			}
+
 			// Kill bonus : ennemi à 0 = forte récompense
 			if (!leek.ally && life <= 0) {
 				score += 5000.0 * (mapContainsKey(Cache.enemiesPrio, id) ? Cache.enemiesPrio[id] : 1.0);

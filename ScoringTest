@@ -1,43 +1,47 @@
-/* Test à lancer en 1v1 sans obstacles.*/
-class ScoringTest{
+/* Tests de non-régression pour le nouveau pipeline (BoardState + Evaluator + Planner).
+ * Activer active=true en 1v1 sans obstacles pour vérifier les scenarios. */
+class ScoringTest {
 
     static boolean active = false;
-    static boolean testAction = false;
 
     static void run() {
         integer me = getEntity();
         integer enemy = getNearestEnemy();
-        if (ScoringTest.testAction) {
-            Cache.leeks[me].life = 1500;
-            Cache.leeks[me].strength = 0;
-            Cache.leeks[me].wisdom = 500;
-            Cache.leeks[me].science = 0;
-            Cache.leeks[me].resistance = 0;
-            Cache.leeks[enemy].life = 1500;
-            Cache.items[CHIP_INVERSION].effects[2][1] = 100;
-            Cache.items[CHIP_INVERSION].effects[2][2] = 100;
-            Cache.items[WEAPON_J_LASER].effects[0][1] = 100;
-            Cache.items[WEAPON_J_LASER].effects[0][2] = 100;
-            Cache.items[WEAPON_J_LASER].cost = 1;
+
+        // ---- Scénario 1 : boost stat → le nœud boost doit être valorisé positivement ----
+        BoardState s = BoardState.fromCache();
+        real scoreBefore = Evaluator.evaluateState(s);
+
+        // Simuler un buff de force sur soi (+100 force)
+        if (s.statBuff[me] == null) s.statBuff[me] = [:];
+        s.statBuff[me]['strength'] = 100.0;
+        real scoreAfterBuff = Evaluator.evaluateState(s);
+        boolean buffValued = scoreAfterBuff > scoreBefore;
+        debug('[ScoringTest] S1 buff valorisé (+strength) : ' + buffValued
+            + ' (delta=' + (scoreAfterBuff - scoreBefore) + ')');
+
+        // ---- Scénario 2 : DamageModel avec bonus force ----
+        Leek caster = Cache.leeks[me];
+        Leek target = Cache.leeks[enemy];
+        if (caster != null && target != null) {
+            Array fakeEffect = [EFFECT_DAMAGE, 100, 100, 0, 0, 0];
+            Object res0 = DamageModel.resolveDamage(fakeEffect, caster, target, 1.0, 0.0, 0.0);
+            Object res1 = DamageModel.resolveDamage(fakeEffect, caster, target, 1.0, 100.0, 0.0);
+            boolean buffIncreaseDmg = res1.dealt > res0.dealt;
+            debug('[ScoringTest] S2 buff force augmente dégâts simulés : ' + buffIncreaseDmg
+                + ' (' + res0.dealt + ' -> ' + res1.dealt + ')');
         }
 
-        Map<string, Object> res = [:]
-        //(Array effect, integer entity, Leek leek, real prio, real entityPrio, real areaMulti, Item item)
-        res['heal'] = Scoring.getPrioHeal(Cache.items[CHIP_REMISSION].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_REMISSION]);
-        res['buffStrength'] = Scoring.getPrioBuffStrength(Cache.items[CHIP_PROTEIN].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_PROTEIN]);
-        res['rawGeneric'] = Scoring.getPrioRawBuffGeneric(Cache.items[CHIP_PROTEIN].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_PROTEIN]);
-        res['buffTP'] = Scoring.getPrioBuffTp(Cache.items[CHIP_MOTIVATION].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_MOTIVATION]);
-        res['absoluteShield'] = Scoring.getPrioAbsoluteShield(Cache.items[CHIP_HELMET].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_HELMET]);
-        res['relativeShield'] = Scoring.getPrioRelativeShield(Cache.items[CHIP_WALL].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_WALL]);
-        res['novaVitality'] = Scoring.getPrioNovaVitality(Cache.items[CHIP_MUTATION].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_MUTATION]);
-        res['maxHeal'] = Scoring.getPrioBoostMaxLife(Cache.items[CHIP_ARMORING].effects[0], me, Cache.leeks[me], 1, 1, Cache.items[CHIP_ARMORING]);
-        res['absoluteVulnerability'] = Scoring.getPrioAbsoluteVulnerability(Cache.items[WEAPON_J_LASER].effects[0], enemy, Cache.leeks[me], 1, 1, Cache.items[WEAPON_J_LASER]);
-        res['vulnerability'] = Scoring.getPrioVulnerability(Cache.items[CHIP_INVERSION].effects[2], enemy, Cache.leeks[me], 1, 1, Cache.items[CHIP_INVERSION]);
-        res['damage'] = Scoring.getPrioDamage(Cache.items[CHIP_SHOCK].effects[0], enemy, Cache.leeks[me], 1, 1, Cache.items[CHIP_SHOCK]);
+        // ---- Scénario 3 : gate buff stérile (TP < 2) → buff non valorisé ----
+        BoardState s2 = BoardState.fromCache();
+        s2.tp[me] = 1; // plus assez de TP pour attaquer après
+        if (s2.statBuff[me] == null) s2.statBuff[me] = [:];
+        s2.statBuff[me]['strength'] = 100.0;
+        real scoreGate = Evaluator.evaluateState(s2);
+        real scoreGateBase = scoreBefore - (s.tp[me] - 1) * ScoringConfig.W_TP * 0.1;
+        boolean gateWorking = scoreGate <= scoreGateBase + 1.0; // buff non compté
+        debug('[ScoringTest] S3 gate buff stérile (TP=1) : ' + gateWorking);
 
-        for (string effect : Object row in res) {
-            debug('effect ' + effect + ' : ' + row);
-        }
         pause();
     }
 }
