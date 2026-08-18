@@ -55,15 +55,9 @@ class Planner {
 					integer used = s.usedItem[leekId][a.itemId] != null ? s.usedItem[leekId][a.itemId] : 0;
 					if (used >= item.maxUse) continue;
 
-					// Élagage : action déjà dans node.actions ?
-					boolean alreadyUsed = false;
-					for (Object prev in node.actions) {
-						if (prev.itemId == a.itemId && prev.cellFrom == a.cellFrom && prev.cellTo == a.cellTo) {
-							alreadyUsed = true;
-							break;
-						}
-					}
-					if (alreadyUsed) continue;
+					// Pas d'élagage "déjà joué" : les armes (et puces sans cooldown)
+					// peuvent être réutilisées tant que maxUse et TP le permettent.
+					// La réutilisation est déjà bornée par usedItem/maxUse ci-dessus.
 
 					Object token = s.apply(a);
 					real newScore = Evaluator.evaluateState(s);
