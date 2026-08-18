@@ -1,0 +1,113 @@
+class Planner {
+	// Résultat du Planner : liste de BSActions (non ordonnée) + score final
+	// Noeud du beam : {actions: Array, score: real, state: BoardState}
+
+	// Recherche le meilleur plan pour leekId dans l'état s
+	// Retourne Array de BSActions (sans ordre, le Sequencer ordonne ensuite)
+	static Array plan(BoardState s, integer leekId) {
+		OpBudget.begin('Planner');
+
+		// Noeud initial
+		real initScore = Evaluator.evaluateState(s);
+		Array frontier = [
+			{actions: [], score: initScore, tp: s.tp[leekId], mp: s.mp[leekId]}
+		];
+
+		Array bestActions = [];
+		real  bestScore   = initScore;
+
+		// Profondeur max bornée par les TP disponibles (chaque action coûte >= 1 TP)
+		integer maxDepth = s.tp[leekId] < 20 ? s.tp[leekId] : 20;
+
+		for (integer depth = 0; depth < maxDepth; depth++) {
+			if (!OpBudget.canContinue(0.20)) {
+				debugW('Planner : arrêt budget à profondeur ' + depth);
+				break;
+			}
+			if (isEmpty(frontier)) break;
+
+			integer beamW = OpBudget.beamWidthForRemaining();
+			Array next = [];
+
+			for (Object node in frontier) {
+				if (!OpBudget.canContinue(0.20)) break;
+
+				// Générer les candidats depuis l'état courant
+				// On rejoue les actions du noeud pour reconstruire l'état simulé
+				Array tokens = [];
+				for (Object a in node.actions) {
+					push(tokens, s.apply(a));
+				}
+
+				// Candidats d'attaque/buff + moves
+				Array candidates = arrayConcat(
+					ActionGenerator.attacks(s, leekId),
+					ActionGenerator.moves(s, leekId)
+				);
+
+				for (Object a in candidates) {
+					if (!OpBudget.canContinue(0.20)) break;
+
+					// Vérifier TP/MP disponibles dans l'état simulé
+					Item item = Cache.items[a.itemId];
+					if (s.tp[leekId] < item.cost) continue;
+					if (s.chipCD[leekId][a.itemId] == true) continue;
+					integer used = s.usedItem[leekId][a.itemId] != null ? s.usedItem[leekId][a.itemId] : 0;
+					if (used >= item.maxUse) continue;
+
+					// Élagage : action déjà dans node.actions ?
+					boolean alreadyUsed = false;
+					for (Object prev in node.actions) {
+						if (prev.itemId == a.itemId && prev.cellFrom == a.cellFrom && prev.cellTo == a.cellTo) {
+							alreadyUsed = true;
+							break;
+						}
+					}
+					if (alreadyUsed) continue;
+
+					Object token = s.apply(a);
+					real newScore = Evaluator.evaluateState(s);
+					s.undo(token);
+
+					if (newScore > bestScore) {
+						bestScore   = newScore;
+						bestActions = arrayConcat(node.actions, [a]);
+					}
+
+					// Élagage par dominance : si score inférieur à tous les noeuds existants avec même TP, ignorer
+					// (simplification : on push et on tronque ensuite)
+					push(next, {actions: arrayConcat(node.actions, [a]), score: newScore, tp: s.tp[leekId], mp: s.mp[leekId]});
+				}
+
+				// Annuler les actions du noeud (ordre inverse)
+				Array tokensRev = arrayReverse(tokens);
+				for (Object tok in tokensRev) {
+					s.undo(tok);
+				}
+			}
+
+			if (isEmpty(next)) break;
+
+			// Garder les beamW meilleurs noeuds
+			next = arraySort(next, function(a, b) {
+				if (a.score > b.score) return -1;
+				if (a.score < b.score) return 1;
+				return 0;
+			});
+			if (count(next) > beamW) {
+				next = arraySlice(next, 0, beamW);
+			}
+			frontier = next;
+
+			// Mise à jour du meilleur noeud de la frontier
+			if (!isEmpty(frontier) && frontier[0].score > bestScore) {
+				bestScore   = frontier[0].score;
+				bestActions = frontier[0].actions;
+			}
+		}
+
+		OpBudget.end('Planner');
+		debug('Planner : score=' + bestScore + ', nb actions=' + count(bestActions));
+		return bestActions;
+	}
+}

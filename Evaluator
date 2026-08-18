@@ -1,0 +1,55 @@
+class Evaluator {
+	// Valeur globale d'un état de plateau (plus haut = mieux pour nous)
+	static real evaluateState(BoardState s) {
+		real score = 0.0;
+		integer selfId = s.selfId;
+
+		for (Leek leek in Cache.leeks) {
+			integer id = leek.id;
+			real life     = s.life[id];
+			real relSh    = s.relShield[id];
+			real absSh    = s.absShield[id];
+			real sign     = leek.ally ? 1.0 : -1.0;
+
+			// Vie restante (pondérée par priorité ennemi)
+			real lifeScore = life;
+			if (!leek.ally && mapContainsKey(Cache.enemiesPrio, id)) {
+				lifeScore *= (Cache.enemiesPrio[id] / 3.0);
+			}
+			score += sign * lifeScore;
+
+			// Boucliers (alliés uniquement)
+			if (leek.ally) {
+				score += relSh * ScoringConfig.W_RELATIVE_SHIELD;
+				score += absSh * ScoringConfig.W_ABSOLUTE_SHIELD;
+			}
+
+			// TP/MP restants (alliés uniquement)
+			if (leek.ally) {
+				score += s.tp[id] * ScoringConfig.W_TP * 0.1;
+				score += s.mp[id] * ScoringConfig.W_MP * 0.1;
+			}
+
+			// Kill bonus : ennemi à 0 = forte récompense
+			if (!leek.ally && life <= 0) {
+				score += 5000.0 * (mapContainsKey(Cache.enemiesPrio, id) ? Cache.enemiesPrio[id] : 1.0);
+			}
+			// Mort alliée = forte pénalité
+			if (leek.ally && life <= 0 && leek.type == ENTITY_LEEK) {
+				score -= 5000.0;
+			}
+		}
+
+		return score;
+	}
+
+	// Gain marginal d'une action = evaluateState(après) - evaluateState(avant)
+	// Passe par apply/undo pour ne pas cloner le BoardState
+	static real marginalGain(BoardState s, Object a) {
+		real before = Evaluator.evaluateState(s);
+		Object token = s.apply(a);
+		real after  = Evaluator.evaluateState(s);
+		s.undo(token);
+		return after - before;
+	}
+}

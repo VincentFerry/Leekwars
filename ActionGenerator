@@ -1,0 +1,174 @@
+class ActionGenerator {
+	// Kinds d'action
+	static integer KIND_ATTACK = 0;
+	static integer KIND_BUFF   = 1;
+	static integer KIND_MOVE   = 2;
+
+	// Items exclus du générateur principal (gérés séparément ou inutiles ici)
+	static Array<integer> EXCLUDED = [
+		WEAPON_ILLICIT_GRENADE_LAUNCHER,
+		WEAPON_UNSTABLE_DESTROYER,
+		CHIP_ADRENALINE,
+		CHIP_TELEPORTATION,
+	];
+
+	// Génère les candidats d'attaque/buff pour leekId dans l'état s
+	// Retourne Array de BSAction (sans score) : {leekId, itemId, cellFrom, cellTo, kind}
+	static Array attacks(BoardState s, integer leekId) {
+		OpBudget.begin('ActionGen.attacks');
+		Array results = [];
+		Leek leek = Cache.leeks[leekId];
+
+		// Cellules accessibles depuis la position simulée
+		integer simCell = s.cell[leekId];
+		integer simMp   = s.mp[leekId];
+		Map<integer, integer> cells = Carte.getCellulesAccessibles(simCell, simMp);
+
+		// Inclure cellules de saut si disponible
+		if (s.chipCD[leekId][CHIP_JUMP] != true && inArray(leek.chips, CHIP_JUMP)) {
+			Map<integer, integer> jumpCells = Carte.cellAccessJump(leek);
+			for (integer jc : integer jd in jumpCells) {
+				if (!mapContainsKey(cells, jc)) cells[jc] = jd;
+			}
+		}
+
+		Array<integer> items = arrayConcat(leek.weapons, leek.chips);
+		items = arrayFilter(items, function(i) {
+			return !inArray(ActionGenerator.EXCLUDED, i);
+		});
+
+		for (integer itemId in items) {
+			// Vérifier cooldown simulé
+			if (s.chipCD[leekId][itemId] == true) continue;
+			// Vérifier maxUse
+			Item item = Cache.items[itemId];
+			integer used = s.usedItem[leekId][itemId] != null ? s.usedItem[leekId][itemId] : 0;
+			if (used >= item.maxUse) continue;
+
+			// Résurrection : cas spécial
+			if (itemId == CHIP_RESURRECTION) {
+				for (Leek target in Cache.leeks) {
+					if (target.type != ENTITY_LEEK || !target.ally) continue;
+					if (s.life[target.id] > 0) continue;
+					integer? resCell = Carte.getCellToInvoc(CHIP_RESURRECTION, simCell, leekId);
+					if (resCell) {
+						Object a = {leekId: leekId, itemId: itemId, cellFrom: simCell, cellTo: resCell, kind: ActionGenerator.KIND_BUFF, entityToRes: target.id};
+						push(results, a);
+					}
+				}
+				continue;
+			}
+
+			// Invocation
+			if (mapContainsKey(Cache.chipsSummon, itemId)) {
+				integer? invocCell = Carte.getCellToInvoc(itemId, simCell, leekId);
+				if (invocCell) {
+					Object a = {leekId: leekId, itemId: itemId, cellFrom: simCell, cellTo: invocCell, kind: ActionGenerator.KIND_BUFF, entityToRes: -1};
+					push(results, a);
+				}
+				continue;
+			}
+
+			// Cibles selon mainTarget
+			Array cellsTarget = [];
+			if (item.mainTarget == 'enemy') {
+				cellsTarget = Carte.getAreaTarget(leekId, item.area, 'enemy');
+			} else if (item.mainTarget == 'ally') {
+				cellsTarget = Carte.getAreaTarget(leekId, item.area, 'ally');
+			} else if (item.mainTarget == 'both') {
+				cellsTarget = Carte.getAreaTarget(leekId, item.area, 'both');
+			}
+
+			if (isEmpty(cellsTarget)) continue;
+
+			integer candidateCount = 0;
+			for (integer cellFrom : integer mpCost in cells) {
+				if (!OpBudget.canContinue(0.05)) break;
+				for (integer cellTo in cellsTarget) {
+					if (candidateCount >= 600) break;
+					if (getCellDistance(cellFrom, cellTo) > item.maxRange) continue;
+					if (getCellDistance(cellFrom, cellTo) < item.minRange) continue;
+					if (item.needLos && !lineOfSight(cellFrom, cellTo)) continue;
+					if (cellTo == simCell && cellFrom != simCell) continue;
+					if (item.launchType == LAUNCH_TYPE_LINE && !isOnSameLine(cellFrom, cellTo)) continue;
+					if (item.launchType == LAUNCH_TYPE_DIAGONAL) {
+						if (abs(getCellX(cellFrom) - getCellX(cellTo)) != abs(getCellY(cellFrom) - getCellY(cellTo))) continue;
+					}
+					if (item.launchType == LAUNCH_TYPE_STAR) {
+						if (abs(getCellX(cellFrom) - getCellX(cellTo)) != abs(getCellY(cellFrom) - getCellY(cellTo)) && !isOnSameLine(cellFrom, cellTo)) continue;
+					}
+					integer k = mapContainsKey(Cache.chipsBoost, itemId) ? ActionGenerator.KIND_BUFF : ActionGenerator.KIND_ATTACK;
+					Object a = {leekId: leekId, itemId: itemId, cellFrom: cellFrom, cellTo: cellTo, kind: k, entityToRes: -1};
+					push(results, a);
+					candidateCount++;
+				}
+				if (candidateCount >= 600) break;
+			}
+		}
+
+		if (count(results) > 800) {
+			debugW('ActionGenerator.attacks : troncature ' + count(results) + ' -> 800');
+			results = arraySlice(results, 0, 800);
+		}
+
+		OpBudget.end('ActionGen.attacks');
+		return results;
+	}
+
+	// Génère les candidats de déplacement offensif (jump, grapin, gant, inversion)
+	// Ces actions modifient le plateau et permettent des setups AOE
+	static Array moves(BoardState s, integer leekId) {
+		OpBudget.begin('ActionGen.moves');
+		Array results = [];
+		Leek leek = Cache.leeks[leekId];
+		integer simCell = s.cell[leekId];
+
+		// CHIP_JUMP : vers des cellules qui augmentent le nombre de cibles atteignables
+		if (inArray(leek.chips, CHIP_JUMP) && s.chipCD[leekId][CHIP_JUMP] != true && s.tp[leekId] >= Cache.items[CHIP_JUMP].cost) {
+			for (integer jCell in Cache.cellsToJump) {
+				if (jCell == simCell) continue;
+				if (getCellDistance(simCell, jCell) > Cache.items[CHIP_JUMP].maxRange) continue;
+				if (!lineOfSight(simCell, jCell)) continue;
+				Object a = {leekId: leekId, itemId: CHIP_JUMP, cellFrom: simCell, cellTo: jCell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
+				push(results, a);
+			}
+		}
+
+		// CHIP_INVERSION : échanger positions pour setup AOE ou dégager un allié
+		if (inArray(leek.chips, CHIP_INVERSION) && s.chipCD[leekId][CHIP_INVERSION] != true && s.tp[leekId] >= Cache.items[CHIP_INVERSION].cost) {
+			Item invItem = Cache.items[CHIP_INVERSION];
+			for (Leek target in Cache.leeks) {
+				if (target.id == leekId || target.life <= 0) continue;
+				if (target.cell == null) continue;
+				integer d = getCellDistance(simCell, target.cell);
+				if (d < invItem.minRange || d > invItem.maxRange) continue;
+				if (invItem.needLos && !lineOfSight(simCell, target.cell)) continue;
+				Object a = {leekId: leekId, itemId: CHIP_INVERSION, cellFrom: simCell, cellTo: target.cell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
+				push(results, a);
+			}
+		}
+
+		// CHIP_GRAPPLE / CHIP_BOXING_GLOVE : attirer/pousser un ennemi
+		Array<integer> pushItems = [];
+		if (inArray(leek.chips, CHIP_GRAPPLE))       push(pushItems, CHIP_GRAPPLE);
+		if (inArray(leek.chips, CHIP_BOXING_GLOVE))  push(pushItems, CHIP_BOXING_GLOVE);
+
+		for (integer pushId in pushItems) {
+			if (s.chipCD[leekId][pushId] == true) continue;
+			if (s.tp[leekId] < Cache.items[pushId].cost) continue;
+			Item pushItem = Cache.items[pushId];
+			for (Leek target in Cache.leeks) {
+				if (target.ally || target.life <= 0) continue;
+				if (target.cell == null) continue;
+				integer d = getCellDistance(simCell, target.cell);
+				if (d < pushItem.minRange || d > pushItem.maxRange) continue;
+				if (pushItem.needLos && !lineOfSight(simCell, target.cell)) continue;
+				Object a = {leekId: leekId, itemId: pushId, cellFrom: simCell, cellTo: target.cell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
+				push(results, a);
+			}
+		}
+
+		OpBudget.end('ActionGen.moves');
+		return results;
+	}
+}

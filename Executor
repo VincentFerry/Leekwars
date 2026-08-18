@@ -1,0 +1,113 @@
+class Executor {
+	// Exécute un plan (Array de BSActions ordonnées par le Sequencer)
+	// Zéro scoring, zéro génération d'actions, zéro mutation de Cache pendant l'exécution
+	static void run(integer leekId, Array plan) {
+		OpBudget.begin('Executor');
+		for (Object a in plan) {
+			if (!OpBudget.canContinue(0.02)) {
+				debugW('Executor : arrêt budget');
+				break;
+			}
+			Executor.executeAction(leekId, a);
+		}
+		OpBudget.end('Executor');
+	}
+
+	static void executeAction(integer leekId, Object a) {
+		integer myCell = getCell();
+		integer mp     = getMP();
+		integer tp     = getTP();
+		Item item      = Cache.items[a.itemId];
+		integer? result;
+
+		// — Déplacement vers cellFrom si nécessaire —
+		if (a.cellFrom != myCell && a.kind != ActionGenerator.KIND_MOVE) {
+			// Vérifier qu'on a assez de TP pour l'action après le déplacement
+			if (item.cost > tp) return;
+
+			integer? pathL = getPathLength(myCell, a.cellFrom);
+			if (!pathL || pathL > mp) {
+				// Tentative via saut
+				if (item.cost + Cache.items[CHIP_JUMP].cost > tp) return;
+				Map area3 = Cache.areaCell3[a.cellFrom];
+				integer lowDist = 99;
+				integer? resCell;
+				for (integer cell : integer dist in area3) {
+					if (!isEmptyCell(cell)) continue;
+					integer? tmpDist = getPathLength(cell, myCell, [myCell]);
+					if (tmpDist && tmpDist < lowDist && tmpDist <= mp) {
+						lowDist = tmpDist;
+						resCell = cell;
+					}
+				}
+				if (resCell) {
+					moveTowardCell(resCell, mp);
+					useChipOnCell(CHIP_JUMP, a.cellFrom);
+				} else {
+					return; // impossible d'atteindre
+				}
+			} else {
+				moveTowardCell(a.cellFrom, mp);
+			}
+		}
+
+		// — Saut pur (KIND_MOVE + CHIP_JUMP) —
+		if (a.kind == ActionGenerator.KIND_MOVE && a.itemId == CHIP_JUMP) {
+			useChipOnCell(CHIP_JUMP, a.cellTo);
+			return;
+		}
+
+		// — Inversion —
+		if (a.itemId == CHIP_INVERSION) {
+			useChipOnCell(CHIP_INVERSION, a.cellTo);
+			return;
+		}
+
+		// — Grappin / Gant —
+		if (a.itemId == CHIP_GRAPPLE || a.itemId == CHIP_BOXING_GLOVE) {
+			useChipOnCell(a.itemId, a.cellTo);
+			return;
+		}
+
+		// — Changement d'arme —
+		if (item.is_weapon && getWeapon() != a.itemId) {
+			setWeapon(a.itemId);
+		}
+
+		// — Utilisation de l'item —
+		if (a.itemId == CHIP_RESURRECTION) {
+			result = resurrect(a.entityToRes, a.cellTo);
+		} else if (mapContainsKey(Cache.chipsSummon, a.itemId)) {
+			result = summon(a.itemId, a.cellTo, main);
+			if (result < 1) {
+				result = summon(a.itemId, getCellToUseChip(a.itemId, getEntity()), main);
+			}
+		} else if (item.is_weapon) {
+			result = useWeaponOnCell(a.cellTo);
+		} else if (a.cellFrom == a.cellTo && item.area == AREA_POINT) {
+			if (!Cache.forceNoMove) moveTowardCell(a.cellFrom, getMP());
+			result = useChipOnCell(a.itemId, getCell());
+		} else {
+			result = useChipOnCell(a.itemId, a.cellTo);
+		}
+
+		// — Filet de sécurité : adrenaline si USE_NOT_ENOUGH_TP —
+		if (result != null && result == USE_NOT_ENOUGH_TP) {
+			if (getCooldown(CHIP_ADRENALINE) == 0 && inArray(Cache.leeks[leekId].chips, CHIP_ADRENALINE)) {
+				debugW('Executor : force adrenaline');
+				useChip(CHIP_ADRENALINE);
+				if (item.is_weapon) {
+					result = useWeaponOnCell(a.cellTo);
+				} else if (a.cellFrom == a.cellTo) {
+					result = useChip(a.itemId);
+				} else {
+					result = useChipOnCell(a.itemId, a.cellTo);
+				}
+			}
+		}
+
+		if (result != null && result <= 0) {
+			debugE('Executor : échec ' + result + ' item=' + item.name + ' cellFrom=' + a.cellFrom + ' cellTo=' + a.cellTo);
+		}
+	}
+}

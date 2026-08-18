@@ -1,0 +1,69 @@
+class Sequencer {
+	// Ordonne le set de BSActions retenu par le Planner
+	// Règles (par priorité décroissante) :
+	//  1. CHIP_LIBERATION en premier
+	//  2. Buffs sur soi (cellFrom == cellTo, AREA_POINT) avant les attaques
+	//  3. Déplacements (KIND_MOVE) avant les AOE qui en dépendent
+	//  4. Boucliers avant d'encaisser
+	//  5. CHIP_ADRENALINE avant les attaques coûteuses
+	//  6. Minimiser le coût de déplacement réel (getPathLength sur petit N)
+	static Array sort(Array actions, integer leekId) {
+		OpBudget.begin('Sequencer');
+		if (count(actions) <= 1) {
+			OpBudget.end('Sequencer');
+			return actions;
+		}
+		if (Cache.turn == 1) {
+			OpBudget.end('Sequencer');
+			return actions; // Tour 1 : ne pas réordonner (réflexes en premier garanti par le score)
+		}
+
+		// Calculer le coût de déplacement depuis la position actuelle
+		// (appelé une seule fois sur N petit = actions retenues)
+		integer currentCell = Cache.leeks[leekId].cell;
+
+		Array sorted = arraySort(actions, function(Object a, Object b) {
+			// 1. CHIP_LIBERATION toujours premier
+			boolean aIsLib = (a.itemId == CHIP_LIBERATION);
+			boolean bIsLib = (b.itemId == CHIP_LIBERATION);
+			if (aIsLib && !bIsLib) return -1;
+			if (!aIsLib && bIsLib) return 1;
+
+			// 2. CHIP_ADRENALINE en tête (avant attaques coûteuses)
+			boolean aIsAdren = (a.itemId == CHIP_ADRENALINE);
+			boolean bIsAdren = (b.itemId == CHIP_ADRENALINE);
+			if (aIsAdren && !bIsAdren) return -1;
+			if (!aIsAdren && bIsAdren) return 1;
+
+			// 3. Buffs sur soi (AREA_POINT, cellFrom == cellTo) avant tout le reste
+			boolean aIsSelfBuff = (a.cellFrom == a.cellTo && Cache.items[a.itemId].area == AREA_POINT);
+			boolean bIsSelfBuff = (b.cellFrom == b.cellTo && Cache.items[b.itemId].area == AREA_POINT);
+			if (aIsSelfBuff && !bIsSelfBuff) return -1;
+			if (!aIsSelfBuff && bIsSelfBuff) return 1;
+
+			// 4. Boucliers (avant d'encaisser)
+			boolean aIsShield = mapContainsKey(Cache.chipsShield, a.itemId);
+			boolean bIsShield = mapContainsKey(Cache.chipsShield, b.itemId);
+			if (aIsShield && !bIsShield) return -1;
+			if (!aIsShield && bIsShield) return 1;
+
+			// 5. Déplacements (KIND_MOVE) avant les attaques qui en dépendent
+			boolean aIsMove = (a.kind == ActionGenerator.KIND_MOVE);
+			boolean bIsMove = (b.kind == ActionGenerator.KIND_MOVE);
+			if (aIsMove && !bIsMove) return -1;
+			if (!aIsMove && bIsMove) return 1;
+
+			// 6. Minimiser le coût de déplacement réel (getPathLength)
+			integer? pathA = getPathLength(currentCell, a.cellFrom);
+			integer? pathB = getPathLength(currentCell, b.cellFrom);
+			integer dA = pathA ? pathA : 99;
+			integer dB = pathB ? pathB : 99;
+			if (dA != dB) return dA - dB;
+
+			return 0;
+		});
+
+		OpBudget.end('Sequencer');
+		return sorted;
+	}
+}

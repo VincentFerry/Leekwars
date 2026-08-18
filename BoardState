@@ -1,0 +1,236 @@
+class BoardState {
+	Map<integer, integer> cell     = [:];
+	Map<integer, real>    life     = [:];
+	Map<integer, real>    relShield = [:];
+	Map<integer, real>    absShield = [:];
+	Map<integer, real>    tp       = [:];
+	Map<integer, integer> mp       = [:];
+	// usedItem[entityId][itemId] = count utilisé ce tour
+	Map<integer, Map<integer, integer>> usedItem = [:];
+	// cooldowns simulés : [entityId][itemId] = true si en CD
+	Map<integer, Map<integer, boolean>> chipCD  = [:];
+	integer selfId = -1;
+	// index inverse cellule -> entityId (-1 si vide)
+	Map<integer, integer> cellToEntity = [:];
+
+	// Construit le BoardState initial depuis Cache.leeks
+	static BoardState fromCache() {
+		BoardState s = new BoardState();
+		s.selfId = getEntity();
+		for (Leek leek in Cache.leeks) {
+			integer id = leek.id;
+			s.cell[id]      = leek.cell;
+			s.life[id]      = leek.life;
+			s.relShield[id] = leek.relativeShield;
+			s.absShield[id] = leek.absoluteShield;
+			s.tp[id]        = leek.tp;
+			s.mp[id]        = leek.mp;
+			s.usedItem[id]  = [:];
+			s.chipCD[id]    = [:];
+			for (integer itemId in arrayConcat(leek.weapons, leek.chips)) {
+				s.usedItem[id][itemId] = leek.itemMaxUse[itemId] != null ? leek.itemMaxUse[itemId] : 0;
+			}
+			if (leek.chipsCooldown != null) {
+				for (integer chipId : boolean inCD in leek.chipsCooldown) {
+					s.chipCD[id][chipId] = inCD;
+				}
+			}
+			if (leek.cell != null) {
+				s.cellToEntity[leek.cell] = id;
+			}
+		}
+		return s;
+	}
+
+	// Entité sur une cellule (-1 si vide)
+	integer entityOn(integer c) {
+		if (mapContainsKey(this.cellToEntity, c)) return this.cellToEntity[c];
+		return -1;
+	}
+
+	// La cellule est-elle accessible depuis fromCell avec mp dispo ?
+	boolean isReachable(integer fromCell, integer toCell, integer availMp) {
+		if (fromCell == toCell) return true;
+		integer? dist = getPathLength(fromCell, toCell);
+		if (!dist) return false;
+		return dist <= availMp;
+	}
+
+	// Applique une BSAction et renvoie un token d'undo (deltas)
+	// BSAction : {leekId, itemId, cellFrom, cellTo, kind}
+	// kind : 0=attack/buff, 1=move
+	Object apply(Object a) {
+		integer lid    = a.leekId;
+		integer itemId = a.itemId;
+		Object token   = {
+			lid       : lid,
+			itemId    : itemId,
+			kind      : a.kind,
+			prevCell  : this.cell[lid],
+			prevLife  : [:],
+			prevRelSh : [:],
+			prevAbsSh : [:],
+			prevTp    : this.tp[lid],
+			prevMp    : this.mp[lid],
+			prevUsed  : (this.usedItem[lid][itemId] != null ? this.usedItem[lid][itemId] : 0),
+			prevCD    : (this.chipCD[lid][itemId] != null ? this.chipCD[lid][itemId] : false),
+			movedEntities : [:],
+		};
+
+		Item item = Cache.items[itemId];
+
+		// Coût TP
+		integer weaponCost = item.cost;
+		if (item.is_weapon) {
+			// changement d'arme = +1 TP (simplifié)
+		}
+		this.tp[lid] -= weaponCost;
+
+		// Coût MP (déplacement vers cellFrom)
+		if (a.cellFrom != this.cell[lid] && a.kind != 1) {
+			integer? pathCost = getPathLength(this.cell[lid], a.cellFrom);
+			if (pathCost) {
+				this.mp[lid] -= pathCost;
+				this.cellToEntity[this.cell[lid]] = -1;
+				this.cell[lid] = a.cellFrom;
+				this.cellToEntity[a.cellFrom] = lid;
+			}
+		}
+
+		// Incrémenter usedItem
+		if (this.usedItem[lid][itemId] == null) this.usedItem[lid][itemId] = 0;
+		this.usedItem[lid][itemId]++;
+
+		// Marquer cooldown
+		if (item.cooldown > 0 || item.cooldown == -1) {
+			this.chipCD[lid][itemId] = true;
+		}
+
+		if (a.kind == 1) {
+			// Action de déplacement pur (jump/téléport)
+			token.movedEntities[lid] = this.cell[lid];
+			this.cellToEntity[this.cell[lid]] = -1;
+			this.cell[lid] = a.cellTo;
+			this.cellToEntity[a.cellTo] = lid;
+			this.mp[lid] -= item.cost; // coût du jump en TP déjà déduit
+		} else {
+			// Action d'attaque/buff : calcul d'impact sur la zone
+			Array<integer> areaCells = item.getItemEffectiveArea(a.cellFrom, a.cellTo);
+			for (integer areaCell in areaCells) {
+				integer targetId = this.entityOn(areaCell);
+				if (targetId == -1) continue;
+				Leek target = Cache.leeks[targetId];
+				Leek caster = Cache.leeks[lid];
+
+				// Sauvegarder état avant
+				if (!mapContainsKey(token.prevLife, targetId)) {
+					token.prevLife[targetId]  = this.life[targetId];
+					token.prevRelSh[targetId] = this.relShield[targetId];
+					token.prevAbsSh[targetId] = this.absShield[targetId];
+				}
+
+				real areaMulti = Carte.areaMultiplicator[getCellDistance(areaCell, a.cellTo)];
+				for (Array effect in item.effects) {
+					integer eff = effect[0];
+					if (eff == EFFECT_DAMAGE) {
+						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti);
+						this.life[targetId] -= res.dealt;
+						// vol de vie
+						if (res.steal > 0) {
+							if (!mapContainsKey(token.prevLife, lid)) token.prevLife[lid] = this.life[lid];
+							this.life[lid] += res.steal;
+						}
+					} else if (eff == EFFECT_LIFE_DAMAGE) {
+						Object res = DamageModel.resolveLifeDamage(effect, caster, target, areaMulti);
+						this.life[targetId] -= res.dealt;
+					} else if (eff == EFFECT_NOVA_DAMAGE) {
+						Object res = DamageModel.resolveNovaDamage(effect, caster, target, areaMulti);
+						// nova réduit totalLife (simulé via absShield proxy, assez pour scoring)
+					} else if (eff == EFFECT_HEAL || eff == EFFECT_RAW_HEAL) {
+						real heal = effect[1] * areaMulti * (1.0 + caster.wisdom / 100.0);
+						real maxH = Cache.leeks[targetId].totalLife - this.life[targetId];
+						if (maxH > 0) {
+							this.life[targetId] += heal > maxH ? maxH : heal;
+						}
+					} else if (eff == EFFECT_RELATIVE_SHIELD) {
+						real val = effect[1] * areaMulti * (1.0 + caster.resistance / 100.0);
+						this.relShield[targetId] += val;
+					} else if (eff == EFFECT_ABSOLUTE_SHIELD) {
+						real val = effect[1] * areaMulti * (1.0 + caster.resistance / 100.0);
+						this.absShield[targetId] += val;
+					} else if (eff == EFFECT_VULNERABILITY) {
+						this.relShield[targetId] -= effect[1] * areaMulti;
+					} else if (eff == EFFECT_ABSOLUTE_VULNERABILITY) {
+						this.absShield[targetId] -= effect[1] * areaMulti;
+					} else if (eff == EFFECT_INVERT) {
+						// Inversion : swap positions
+						integer otherCell = this.cell[targetId];
+						token.movedEntities[targetId] = otherCell;
+						token.movedEntities[lid]      = this.cell[lid];
+						this.cellToEntity[this.cell[lid]] = targetId;
+						this.cellToEntity[otherCell]      = lid;
+						this.cell[targetId] = this.cell[lid];
+						this.cell[lid]      = otherCell;
+						// pénalité bouclier relatif de la cible (effet réel de l'inversion)
+						this.relShield[targetId] -= 20;
+					} else if (eff == EFFECT_PUSH || eff == EFFECT_ATTRACT) {
+						// Déplacement simplifié : on met à jour cellToEntity
+						token.movedEntities[targetId] = this.cell[targetId];
+						this.cellToEntity[this.cell[targetId]] = -1;
+						this.cell[targetId] = a.cellTo;
+						this.cellToEntity[a.cellTo] = targetId;
+					} else if (eff == EFFECT_BUFF_TP || eff == EFFECT_RAW_BUFF_TP) {
+						this.tp[targetId] += effect[1];
+					} else if (eff == EFFECT_BUFF_MP || eff == EFFECT_RAW_BUFF_MP) {
+						this.mp[targetId] += effect[1];
+					}
+					// Les autres effets (shackle, poison, etc.) ne modifient pas
+					// les champs trackés par BoardState ; ignorés pour la simulation
+				}
+			}
+		}
+
+		return token;
+	}
+
+	// Annule un apply via son token
+	void undo(Object token) {
+		integer lid    = token.lid;
+		integer itemId = token.itemId;
+
+		// Restaurer TP/MP
+		this.tp[lid] = token.prevTp;
+		this.mp[lid] = token.prevMp;
+
+		// Restaurer usedItem
+		this.usedItem[lid][itemId] = token.prevUsed;
+
+		// Restaurer CD
+		this.chipCD[lid][itemId] = token.prevCD;
+
+		// Restaurer position du caster
+		if (this.cell[lid] != token.prevCell) {
+			this.cellToEntity[this.cell[lid]] = -1;
+			this.cell[lid] = token.prevCell;
+			this.cellToEntity[token.prevCell] = lid;
+		}
+
+		// Restaurer vie / boucliers des cibles
+		for (integer targetId : real prevLife in token.prevLife) {
+			this.life[targetId] = prevLife;
+		}
+		for (integer targetId : real prevRel in token.prevRelSh) {
+			this.relShield[targetId] = prevRel;
+		}
+		for (integer targetId : real prevAbs in token.prevAbsSh) {
+			this.absShield[targetId] = prevAbs;
+		}
+
+		// Restaurer positions des entités déplacées
+		for (integer movedId : integer prevC in token.movedEntities) {
+			this.cellToEntity[this.cell[movedId]] = -1;
+			this.cell[movedId] = prevC;
+			this.cellToEntity[prevC] = movedId;
+		}
+	}
+}

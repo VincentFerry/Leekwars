@@ -1,0 +1,73 @@
+class DamageModel {
+	// Probabilité de critique en fonction de l'agilité
+	static real critProb(integer agility) {
+		if (agility >= 1000) return 1.0;
+		if (agility >= 100)  return (agility - 100) / 900.0;
+		return 0.0;
+	}
+
+	// Facteur multiplicateur critique attendu
+	static real critFactor(real p) {
+		return 1.0 + p * (CRITICAL_FACTOR - 1.0);
+	}
+
+	// Dégâts effectifs après boucliers (relatif puis absolu)
+	static real applyShields(real raw, real relShield, real absShield) {
+		real v = raw * (1.0 - relShield / 100.0) - absShield;
+		return v < 0.0 ? 0.0 : v;
+	}
+
+	// Érosion : 5% des dégâts subis + 10% si critique (interpolé)
+	static real erosion(real dealt, real p) {
+		return dealt * (0.05 + p * 0.10);
+	}
+
+	// Vol de vie plafonné par la vie manquante du lanceur
+	static real lifeSteal(real dealt, integer wisdom, real missingLife) {
+		if (missingLife <= 0.0 || dealt <= 0.0) return 0.0;
+		real heal = dealt * wisdom / 1000.0;
+		return heal > missingLife ? missingLife : heal;
+	}
+
+	// Renvoi de dégâts (calculé sur le brut avant boucliers)
+	static real damageReturn(real rawBeforeShield, real drPercent) {
+		return rawBeforeShield * (drPercent / 100.0);
+	}
+
+	// Point d'entrée unifié pour les dégâts EFFECT_DAMAGE
+	// Renvoie {dealt, erosion, steal, returned}
+	static Object resolveDamage(Array effect, Leek caster, Leek target, real areaMulti) {
+		real p       = DamageModel.critProb(caster.agility);
+		real cf      = DamageModel.critFactor(p);
+		real rawBase = effect[1] * areaMulti
+		               * (1.0 + caster.strength / 100.0)
+		               * (1.0 + caster.power / 100.0);
+		real rawCrit = rawBase * cf;
+		real dealt   = DamageModel.applyShields(rawCrit, target.relativeShield, target.absoluteShield);
+		real ero     = DamageModel.erosion(dealt, p);
+		real missingLife = caster.totalLife - caster.life;
+		real steal   = DamageModel.lifeSteal(dealt, caster.wisdom, missingLife);
+		real returned = DamageModel.damageReturn(rawCrit, target.damageReturn);
+		return {dealt: dealt, erosion: ero, steal: steal, returned: returned};
+	}
+
+	// Résolution pour EFFECT_LIFE_DAMAGE (% de la vie du lanceur)
+	static Object resolveLifeDamage(Array effect, Leek caster, Leek target, real areaMulti) {
+		real p      = DamageModel.critProb(caster.agility);
+		real cf     = DamageModel.critFactor(p);
+		real rawCrit = caster.life * (effect[1] / 100.0) * areaMulti
+		               * (1.0 + caster.power / 100.0) * cf;
+		real dealt  = DamageModel.applyShields(rawCrit, target.relativeShield, target.absoluteShield);
+		real ero    = DamageModel.erosion(dealt, p);
+		real returned = DamageModel.damageReturn(rawCrit, target.damageReturn);
+		return {dealt: dealt, erosion: ero, steal: 0.0, returned: returned};
+	}
+
+	// Résolution pour EFFECT_NOVA_DAMAGE (% vie nova)
+	static Object resolveNovaDamage(Array effect, Leek caster, Leek target, real areaMulti) {
+		real value = effect[1] * areaMulti * (1.0 + caster.science / 100.0);
+		real dealt = value < (target.totalLife - target.life) ? value : (target.totalLife - target.life);
+		if (dealt < 0.0) dealt = 0.0;
+		return {dealt: dealt, erosion: 0.0, steal: 0.0, returned: 0.0};
+	}
+}

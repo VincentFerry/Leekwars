@@ -1,0 +1,24 @@
+# Directives IA pour Leek Wars
+
+## Documentation & Règles de Référence
+
+### Règles du jeu
+- `docs/GAME_RULES.md` — encyclopédie complète : mécaniques de combat, formules de dégâts, coups critiques, érosion, effets, carte, armes, puces, modes de jeu.
+- `docs/rules/*.md` — pages individuelles de l'encyclopédie (une par sujet).
+
+### Référence API LeekScript
+- `docs/api/functions.md` — toutes les fonctions disponibles dans les scripts IA (signature, coût en opérations, catégorie).
+- `docs/api/constants.md` — toutes les constantes (EFFECT_*, WEAPON_*, CHIP_*, etc.).
+- `docs/api/weapons.md` — statistiques détaillées des armes (portée, coût PT, effets, zone).
+- `docs/api/chips.md` — statistiques détaillées des puces (portée, coût PT, CD, effets, zone).
+- `docs/api/items.md` — items et potions disponibles.
+
+## Consignes
+1. Consulte `docs/GAME_RULES.md` pour vérifier les formules exactes de dégâts, la gestion des coups critiques, l'érosion et les règles de ligne de vue avant de coder un module d'évaluation.
+2. Consulte `docs/api/functions.md` et `docs/api/constants.md` pour les noms exacts des fonctions et constantes à utiliser dans les scripts.
+3. Respecte rigoureusement la limite d'opérations par tour.
+
+## Tactique
+- Le code doit être optimisé pour jouer en équipe.
+- Priorité au combat de type farmer (éleveur contre éleveur 4x4).
+- tenir le budget de **20 000 000 opérations/tour**.

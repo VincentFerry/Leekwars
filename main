@@ -12,6 +12,19 @@ include('Cache');
 include('Combo');
 include('Potiron');
 include('Operations');
+include('OpBudget');
+include('ScoringConfig');
+include('DamageModel');
+include('BoardState');
+include('Evaluator');
+include('ActionGenerator');
+include('Planner');
+include('Sequencer');
+include('Executor');
+
+// Flag A/B : true = nouveau pipeline (Planner+Sequencer+Executor)
+//            false = ancien pipeline (Combo glouton)
+boolean USE_NEW_PIPELINE = false;
 
 function main() {
 	integer me = getEntity();
@@ -97,37 +110,60 @@ function main() {
 	
 	// Set up leek.actions
 	Array<integer> items = arrayConcat(Cache.leeks[me].weapons, Cache.leeks[me].chips);
-	Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Cache.leeks[me].getCellAccess());
-	Cache.leeks[me].initActions = clone(Cache.leeks[me].actions);
-	Array<Action> actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
-	Array<Action> sortedActions = Combo.sortCombo(actions);
-	Cache.leeks[me].combos[0] = sortedActions;
-	Cache.LeeksStates[0] = clone(Cache.leeks);
-	//if (inArray(Cache.leeks[me].weapons, WEAPON_HEAVY_SWORD)) {
-	if (inArray(Cache.leeks[me].weapons, WEAPON_KATANA)) {
-		Cache.leeks[me].resetActions();
-		Combo.getCombos(Cache.leeks[me].actions);
-	}
-	integer comboId = Combo.evaluateCombos(me);
-	sortedActions = Cache.leeks[me].combos[comboId];
-	
-	// use Actions
-	for (Action action in sortedActions) {
-		debug(action);
-		Action.useAction(me, action);
-	}
-	
-	// prevent bug or tp left with critical i can't simule it before
-	if (getTP() >= 3 && !Cache.forceNoMove) {
-		debug('additionnal actions');
-		Cache.resetCache();
-		Cache.updateCache();
-		Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Carte.getCellulesAccessibles(getCell(), getMP()));
-		actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
-		sortedActions = Combo.sortCombo(actions);
+
+	if (USE_NEW_PIPELINE) {
+		// ===== NOUVEAU PIPELINE =====
+		OpBudget.begin('Pipeline');
+
+		BoardState boardState = BoardState.fromCache();
+		Array plan = Planner.plan(boardState, me);
+		Array sortedPlan = Sequencer.sort(plan, me);
+		Executor.run(me, sortedPlan);
+
+		// Filet de sécurité TP restant
+		if (getTP() >= 3 && !Cache.forceNoMove && OpBudget.canContinue(0.10)) {
+			debug('additionnal actions (new pipeline)');
+			Cache.resetCache();
+			Cache.updateCache();
+			BoardState boardState2 = BoardState.fromCache();
+			Array plan2 = Planner.plan(boardState2, me);
+			Array sortedPlan2 = Sequencer.sort(plan2, me);
+			Executor.run(me, sortedPlan2);
+		}
+
+		OpBudget.end('Pipeline');
+	} else {
+		// ===== ANCIEN PIPELINE (référence A/B) =====
+		Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Cache.leeks[me].getCellAccess());
+		Cache.leeks[me].initActions = clone(Cache.leeks[me].actions);
+		Array<Action> actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
+		Array<Action> sortedActions = Combo.sortCombo(actions);
+		Cache.leeks[me].combos[0] = sortedActions;
+		Cache.LeeksStates[0] = clone(Cache.leeks);
+		if (inArray(Cache.leeks[me].weapons, WEAPON_KATANA)) {
+			Cache.leeks[me].resetActions();
+			Combo.getCombos(Cache.leeks[me].actions);
+		}
+		integer comboId = Combo.evaluateCombos(me);
+		sortedActions = Cache.leeks[me].combos[comboId];
+
 		for (Action action in sortedActions) {
-			Action.useAction(me, action);
 			debug(action);
+			Action.useAction(me, action);
+		}
+
+		// prevent bug or tp left with critical i can't simule it before
+		if (getTP() >= 3 && !Cache.forceNoMove) {
+			debug('additionnal actions');
+			Cache.resetCache();
+			Cache.updateCache();
+			Cache.leeks[me].actions = Cache.leeks[me].getActions(items, Carte.getCellulesAccessibles(getCell(), getMP()));
+			actions = Combo.getComboFromActions(me, Cache.leeks[me].actions);
+			sortedActions = Combo.sortCombo(actions);
+			for (Action action in sortedActions) {
+				Action.useAction(me, action);
+				debug(action);
+			}
 		}
 	}
 	
@@ -179,9 +215,7 @@ function main() {
 		}
 	}
 	
-	//if (Operations.debugOpe) {
-		debug("J'ai utilisé " + getOperations() + ' sur ' + getMaxOperations() + ' et je finis à ' + getTP() + ' tp');
-	//}
+	OpBudget.report();
 	if (Cache.leeks[me].type == ENTITY_LEEK && Cache.fightType == FIGHT_TYPE_FARMER && (number(getRegister(getName())) < getOperations())) {
 		setRegister(getName(), getOperations());
 		setRegister('fight id', getFightID());
