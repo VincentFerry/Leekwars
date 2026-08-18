@@ -21,7 +21,7 @@ class ActionGenerator {
 
 		// Cellules accessibles depuis la position simulée
 		integer simCell = s.cell[leekId];
-		integer simMp   = s.mp[leekId];
+		integer simMp   = round(s.mp[leekId]);
 		Map<integer, integer> cells = Carte.getCellulesAccessibles(simCell, simMp);
 
 		// Inclure cellules de saut si disponible

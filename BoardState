@@ -4,7 +4,7 @@ class BoardState {
 	Map<integer, real>    relShield = [:];
 	Map<integer, real>    absShield = [:];
 	Map<integer, real>    tp       = [:];
-	Map<integer, integer> mp       = [:];
+	Map<integer, real>    mp       = [:];
 	// usedItem[entityId][itemId] = count utilisé ce tour
 	Map<integer, Map<integer, integer>> usedItem = [:];
 	// cooldowns simulés : [entityId][itemId] = true si en CD
