@@ -392,7 +392,7 @@ class Scoring {
 
         var prio = 0;
         if (Cache.leeks[entity].ally) {
-            prio -= impact * entityPrio;
+            prio -= impact * entityPrio *10;
         } else {
             prio += impact * entityPrio;
         }
@@ -425,7 +425,7 @@ class Scoring {
 
         var prio = 0;
         if (Cache.leeks[entity].ally) {
-            prio -= impact * entityPrio;
+            prio -= impact * entityPrio * 10;
         } else {
             prio += impact * entityPrio;
         }
