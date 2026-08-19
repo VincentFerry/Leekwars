@@ -1,6 +1,7 @@
 class Evaluator {
 	// Valeur globale d'un état de plateau (plus haut = mieux pour nous)
 	static real evaluateState(BoardState s) {
+		OpBudget.begin('Evaluator.evaluateState');
 		real score = 0.0;
 		integer selfId = s.selfId;
 
@@ -61,6 +62,7 @@ class Evaluator {
 			}
 		}
 
+		OpBudget.end('Evaluator.evaluateState');
 		return score;
 	}
 
