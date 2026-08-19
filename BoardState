@@ -151,7 +151,7 @@ class BoardState {
 				for (Array effect in item.effects) {
 					integer eff = effect[0];
 					if (eff == EFFECT_DAMAGE) {
-						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti, bStr, bAgi);
+						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti, bStr, bAgi, this.relShield[targetId], this.absShield[targetId]);
 						this.life[targetId] -= res.dealt;
 						// vol de vie
 						if (res.steal > 0) {
@@ -159,7 +159,7 @@ class BoardState {
 							this.life[lid] += res.steal;
 						}
 					} else if (eff == EFFECT_LIFE_DAMAGE) {
-						Object res = DamageModel.resolveLifeDamage(effect, caster, target, areaMulti, bAgi);
+						Object res = DamageModel.resolveLifeDamage(effect, caster, target, areaMulti, bAgi, this.relShield[targetId], this.absShield[targetId]);
 						this.life[targetId] -= res.dealt;
 					} else if (eff == EFFECT_NOVA_DAMAGE) {
 						Object res = DamageModel.resolveNovaDamage(effect, caster, target, areaMulti, bSci);

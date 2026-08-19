@@ -3,7 +3,6 @@ class Planner {
 	// Noeud du beam : {actions: Array, score: real, state: BoardState}
 
 	// Recherche le meilleur plan pour leekId dans l'état s
-	// Retourne Array de BSActions (sans ordre, le Sequencer ordonne ensuite)
 	static Array plan(BoardState s, integer leekId) {
 		OpBudget.begin('Planner');
 

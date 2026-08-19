@@ -35,15 +35,17 @@ class DamageModel {
 	}
 
 	// Point d'entrée unifié pour les dégâts EFFECT_DAMAGE
+	// relShield/absShield sont les boucliers SIMULÉS de la cible (BoardState),
+	// pour que la vulnérabilité appliquée plus tôt dans le combo augmente les dégâts.
 	// Renvoie {dealt, erosion, steal, returned}
-	static Object resolveDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusStrength, real bonusAgility) {
+	static Object resolveDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusStrength, real bonusAgility, real relShield, real absShield) {
 		real p       = DamageModel.critProb(caster.agility + bonusAgility);
 		real cf      = DamageModel.critFactor(p);
 		real rawBase = effect[1] * areaMulti
 		               * (1.0 + (caster.strength + bonusStrength) / 100.0)
 		               * (1.0 + caster.power / 100.0);
 		real rawCrit = rawBase * cf;
-		real dealt   = DamageModel.applyShields(rawCrit, target.relativeShield, target.absoluteShield);
+		real dealt   = DamageModel.applyShields(rawCrit, relShield, absShield);
 		real ero     = DamageModel.erosion(dealt, p);
 		real missingLife = caster.totalLife - caster.life;
 		real steal   = DamageModel.lifeSteal(dealt, caster.wisdom, missingLife);
@@ -52,12 +54,13 @@ class DamageModel {
 	}
 
 	// Résolution pour EFFECT_LIFE_DAMAGE (% de la vie du lanceur)
-	static Object resolveLifeDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusAgility) {
+	// relShield/absShield : boucliers SIMULÉS de la cible (BoardState).
+	static Object resolveLifeDamage(Array effect, Leek caster, Leek target, real areaMulti, real bonusAgility, real relShield, real absShield) {
 		real p      = DamageModel.critProb(caster.agility + bonusAgility);
 		real cf     = DamageModel.critFactor(p);
 		real rawCrit = caster.life * (effect[1] / 100.0) * areaMulti
 		               * (1.0 + caster.power / 100.0) * cf;
-		real dealt  = DamageModel.applyShields(rawCrit, target.relativeShield, target.absoluteShield);
+		real dealt  = DamageModel.applyShields(rawCrit, relShield, absShield);
 		real ero    = DamageModel.erosion(dealt, p);
 		real returned = DamageModel.damageReturn(rawCrit, target.damageReturn);
 		return {dealt: dealt, erosion: ero, steal: 0.0, returned: returned};

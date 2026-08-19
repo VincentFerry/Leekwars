@@ -16,7 +16,6 @@ include('BoardState');
 include('Evaluator');
 include('ActionGenerator');
 include('Planner');
-include('Sequencer');
 include('Executor');
 
 function main() {
@@ -107,9 +106,11 @@ function main() {
 	OpBudget.begin('Pipeline');
 
 	BoardState boardState = BoardState.fromCache();
+	// L'ordre du combo est décidé par le Planner (beam search sur les séquences)
+	// et exécuté tel quel : ne PAS réordonner après coup (casserait les setups
+	// de vulnérabilité type Neutrino où l'ordre change les dégâts).
 	Array plan = Planner.plan(boardState, me);
-	Array sortedPlan = Sequencer.sort(plan, me);
-	Executor.run(me, sortedPlan);
+	Executor.run(me, plan);
 
 	// Filet de sécurité TP restant
 	if (getTP() >= 3 && !Cache.forceNoMove && OpBudget.canContinue(0.10)) {
@@ -118,8 +119,7 @@ function main() {
 		Cache.updateCache();
 		BoardState boardState2 = BoardState.fromCache();
 		Array plan2 = Planner.plan(boardState2, me);
-		Array sortedPlan2 = Sequencer.sort(plan2, me);
-		Executor.run(me, sortedPlan2);
+		Executor.run(me, plan2);
 	}
 
 	OpBudget.end('Pipeline');

@@ -18,10 +18,19 @@ class Evaluator {
 			}
 			score += sign * lifeScore;
 
-			// Boucliers (alliés uniquement)
+			// Boucliers alliés : positifs = bons pour nous
 			if (leek.ally) {
 				score += relSh * ScoringConfig.W_RELATIVE_SHIELD;
 				score += absSh * ScoringConfig.W_ABSOLUTE_SHIELD;
+			} else {
+				// Boucliers ennemis : positifs = mauvais pour nous.
+				// Crédite les actions de setup (vulnérabilité) qui rendent
+				// relShield/absShield ennemis négatifs, pour que le Planner
+				// retienne l'ordre "vulnérabilité -> attaques" sans que le beam
+				// n'élague le setup avant que le combo ne paye.
+				real enemyPrio = mapContainsKey(Cache.enemiesPrio, id) ? (Cache.enemiesPrio[id] / 3.0) : 1.0;
+				score -= relSh * ScoringConfig.W_VULNERABILITY * enemyPrio;
+				score -= absSh * ScoringConfig.W_ABSOLUTE_SHIELD * enemyPrio;
 			}
 
 			// TP/MP restants (alliés uniquement)
