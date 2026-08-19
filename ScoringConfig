@@ -4,6 +4,9 @@ class ScoringConfig {
 	static real W_ABSOLUTE_SHIELD   = 0.8;
 	static real W_VULNERABILITY     = 2.0;
 	static real W_HEAL              = 1.0;
+	// Anti-overheal : on ne valorise un soin que si la cible a perdu au moins
+	// cette fraction de sa vie max. Proche du plein PV, soigner gaspille des TP.
+	static real HEAL_MIN_MISSING_RATIO = 0.20;
 	static real W_NOVA              = 0.5;
 	static real W_GENERIC_STATS     = 0.2;
 	static real W_STRENGTH          = 0.4;

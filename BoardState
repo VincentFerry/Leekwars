@@ -165,9 +165,14 @@ class BoardState {
 						Object res = DamageModel.resolveNovaDamage(effect, caster, target, areaMulti, bSci);
 						// nova réduit totalLife (simulé via absShield proxy, assez pour scoring)
 					} else if (eff == EFFECT_HEAL || eff == EFFECT_RAW_HEAL) {
-						real heal = effect[1] * areaMulti * (1.0 + caster.wisdom / 100.0);
-						real maxH = Cache.leeks[targetId].totalLife - this.life[targetId];
-						if (maxH > 0) {
+						real totLife = Cache.leeks[targetId].totalLife;
+						real maxH = totLife - this.life[targetId];
+						// Anti-overheal : ne créditer le soin que si la cible a perdu
+						// au moins HEAL_MIN_MISSING_RATIO de sa vie max. Proche du plein
+						// PV, un soin ne vaut pas la dépense de TP -> gain simulé nul,
+						// donc le Planner ne le retiendra pas.
+						if (maxH > totLife * ScoringConfig.HEAL_MIN_MISSING_RATIO) {
+							real heal = effect[1] * areaMulti * (1.0 + caster.wisdom / 100.0);
 							this.life[targetId] += heal > maxH ? maxH : heal;
 						}
 					} else if (eff == EFFECT_RELATIVE_SHIELD) {
