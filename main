@@ -113,7 +113,7 @@ function main() {
 		Cache.resetCache();
 		Cache.updateCache();
 		BoardState boardState2 = BoardState.fromCache();
-		Array plan2 = Planner.plan(boardState2, me);
+		Array plan2 = Planner.greedy(boardState2, me);
 		Executor.run(me, plan2);
 	}
 

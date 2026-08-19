@@ -104,4 +104,61 @@ class Planner {
 		debug('Planner : score=' + bestScore + ', nb actions=' + count(bestActions));
 		return bestActions;
 	}
+
+	// Passe finale gloutonne : dépense les TP restants en jouant, une par une,
+	// la meilleure action marginale DEPUIS LA POSITION ACTUELLE (largeur 1, pas
+	// de recherche de déplacement offensif coûteuse). Beaucoup moins chère que
+	// le beam search, elle sert à consommer les TP laissés par l'arrêt budget.
+	static Array greedy(BoardState s, integer leekId) {
+		OpBudget.begin('Planner.greedy');
+		Array chosen = [];
+		integer guard = 0;
+
+		while (OpBudget.canContinue(0.03) && guard < 20) {
+			guard++;
+			integer simCell = s.cell[leekId];
+			real base = Evaluator.evaluateState(s);
+
+			Array candidates = arrayConcat(
+				ActionGenerator.attacks(s, leekId),
+				ActionGenerator.moves(s, leekId)
+			);
+
+			real   bestGain = 0.0;
+			Object bestA    = null;
+
+			for (Object a in candidates) {
+				if (!OpBudget.canContinue(0.03)) break;
+				// Uniquement les actions depuis la position actuelle : pas de
+				// déplacement (hors moves purs) pour rester bon marché.
+				if (a.cellFrom != simCell) continue;
+
+				Item item = Cache.items[a.itemId];
+				if (s.tp[leekId] < item.cost) continue;
+				if (s.chipCD[leekId][a.itemId] == true) continue;
+				integer used = s.usedItem[leekId][a.itemId] != null ? s.usedItem[leekId][a.itemId] : 0;
+				if (used >= item.maxUse) continue;
+
+				Object token = s.apply(a);
+				real gain = Evaluator.evaluateState(s) - base;
+				s.undo(token);
+
+				if (gain > bestGain) {
+					bestGain = gain;
+					bestA    = a;
+				}
+			}
+
+			// Plus aucune action améliorante : on arrête (évite la boucle infinie)
+			if (bestA == null) break;
+
+			// Appliquer définitivement la meilleure action et l'ajouter au plan
+			s.apply(bestA);
+			push(chosen, bestA);
+		}
+
+		OpBudget.end('Planner.greedy');
+		debug('Planner.greedy : nb actions=' + count(chosen));
+		return chosen;
+	}
 }
