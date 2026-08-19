@@ -1,4 +1,3 @@
-include('ScoringTest');
 class Chip extends Item {
 	constructor(integer id) {
 		this.id = id
@@ -15,12 +14,6 @@ class Chip extends Item {
 		this.is_weapon = false;
 		this.maxUse = max(1, getChipMaxUses(id)); // return -1 if there is a coldown
 		super.getMainTarget();
-		if (ScoringTest.active && ScoringTest.testAction) {
-			this.effects[0][1] = 100;
-			this.effects[0][2] = 100;
-			this.effects[0][3] = 1;
-			this.cost = 1;
-		}
 	}
 	Array<integer> getItemEffectiveArea(integer cell, integer cellEnemy) {
 		return getChipEffectiveArea(this.id, cellEnemy, cell);

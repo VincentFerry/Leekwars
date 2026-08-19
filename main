@@ -3,7 +3,6 @@ include('Target');
 include('Action');
 include('BossFenouille');
 include('Leek');
-include('ScoringTest');
 include('Item');
 include('Weapon');
 include('Chip');
@@ -27,10 +26,6 @@ function main() {
 	} else {
 		Cache.resetCache();
 		Cache.updateCache();
-	}
-
-	if (ScoringTest.active) {
-		ScoringTest.run();
 	}
 	
 	if (Cache.boss == BOSS_FENNEL_KING) {
