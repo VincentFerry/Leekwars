@@ -28,6 +28,7 @@ class ActionGenerator {
 		if (s.chipCD[leekId][CHIP_JUMP] != true && inArray(leek.chips, CHIP_JUMP)) {
 			Map<integer, integer> jumpCells = Carte.cellAccessJump(leek);
 			for (integer jc : integer jd in jumpCells) {
+				if (s.entityOn(jc) != -1) continue;
 				if (!mapContainsKey(cells, jc)) cells[jc] = jd;
 			}
 		}
@@ -130,7 +131,8 @@ class ActionGenerator {
 				if (jCell == simCell) continue;
 				if (getCellDistance(simCell, jCell) > Cache.items[CHIP_JUMP].maxRange) continue;
 				if (!lineOfSight(simCell, jCell)) continue;
-				if (!isEmptyCell(jCell)) continue;
+				// Vérification dans le BoardState simulé (cache tour 1 non fiable)
+				if (s.entityOn(jCell) != -1) continue;
 				Object a = {leekId: leekId, itemId: CHIP_JUMP, cellFrom: simCell, cellTo: jCell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
 				push(results, a);
 			}
