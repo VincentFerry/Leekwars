@@ -99,6 +99,7 @@ class Cache {
 			Cache.Fenouille = new BossFenouille();
 		}
 		Cache.getFocusPrio();
+		Cache.enemiesTargets = Action.getEnemiesTarget(getEntity());
 		Cache.getPotiron();
 	}
 	public static updateCache() {
@@ -107,6 +108,7 @@ class Cache {
 		Cache.getLeeks();
 		Cache.getNbAlliesSummon();
 		Cache.getFocusPrio();
+		Cache.enemiesTargets = Action.getEnemiesTarget(getEntity());
 		if (Cache.boss == BOSS_FENNEL_KING) {
 			Cache.Fenouille = new BossFenouille(); // rebuild path cristaux
 		}
