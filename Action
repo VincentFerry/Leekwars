@@ -381,8 +381,6 @@ class Action{
 	
 	static boolean isAlreadyBuff(integer leekId, integer itemId) {
 		Item item = Cache.items[itemId];
-		if (item == null || item.effects == null) return false;
-		// Vérifie si l'item possède au moins un effet non cumulable
 		boolean hasNonStackable = false;
 		for (Array effect in item.effects) {
 			if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0) {
@@ -391,7 +389,6 @@ class Action{
 			}
 		}
 		if (!hasNonStackable) return false;
-		if (Cache.leeks[leekId] == null || Cache.leeks[leekId].effects == null) return false;
 		for (Array buff in Cache.leeks[leekId].effects) {
 			if (itemId == buff[5]) {
 				return true;
