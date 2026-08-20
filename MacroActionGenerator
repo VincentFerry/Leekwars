@@ -1,5 +1,5 @@
-include('Action');
 include('ActionGenerator');
+include('Evaluator');
 
 class MacroActionGenerator {
 	// Nombre de macro-actions conservées par item
@@ -14,11 +14,15 @@ class MacroActionGenerator {
 			ActionGenerator.moves(s, leekId)
 		);
 
+		integer simCell = s.cell[leekId];
+
 		// Scorer chaque action brute et la transformer en macro-action
 		Array scored = [];
 		for (Object a in rawActions) {
 			if (!OpBudget.canContinue(0.05)) break;
-			real score = MacroActionGenerator.estimateScore(leekId, a);
+			real score = MacroActionGenerator.estimateScore(s, leekId, a);
+			// Favoriser les actions jouables depuis la position actuelle
+			if (a.cellFrom == simCell) score += 1000.0;
 			Object macro = {
 				leekId     : a.leekId,
 				itemId     : a.itemId,
@@ -57,15 +61,12 @@ class MacroActionGenerator {
 		return result;
 	}
 
-	// Estimation rapide du gain d'une action brute
-	static real estimateScore(integer leekId, Object a) {
+	// Estimation du gain réel d'une action brute (apply + evaluate + undo)
+	static real estimateScore(BoardState s, integer leekId, Object a) {
 		if (a.kind == ActionGenerator.KIND_MOVE) {
 			return MacroActionGenerator.estimateMoveScore(leekId, a);
 		}
-		Leek leek = Cache.leeks[leekId];
-		Item item = Cache.items[a.itemId];
-		Action temp = new Action(leek, item, a.cellFrom, a.cellTo);
-		return temp.priority;
+		return Evaluator.marginalGain(s, a);
 	}
 
 	// Heuristique rapide pour les actions de déplacement

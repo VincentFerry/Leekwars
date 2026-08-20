@@ -14,6 +14,8 @@ class BoardState {
 	Map<integer, Map<string, real>> statBuff = [:];
 	// items non cumulables déjà actifs sur une cible : [targetId][itemId] = true
 	Map<integer, Map<integer, boolean>> appliedItemEffects = [:];
+	// arme équipée par entité (-1 si aucune)
+	Map<integer, integer> weapon = [:];
 	integer selfId = -1;
 	// index inverse cellule -> entityId (-1 si vide)
 	Map<integer, integer> cellToEntity = [:];
@@ -30,6 +32,7 @@ class BoardState {
 			s.absShield[id] = leek.absoluteShield;
 			s.tp[id]        = leek.tp;
 			s.mp[id]        = leek.mp;
+			s.weapon[id]    = leek.weapon != null ? leek.weapon.id : -1;
 			s.usedItem[id]  = [:];
 			s.chipCD[id]    = [:];
 			s.statBuff[id]  = [:];
@@ -129,19 +132,13 @@ class BoardState {
 			prevMp    : this.mp[lid],
 			prevUsed  : (this.usedItem[lid][itemId] != null ? this.usedItem[lid][itemId] : 0),
 			prevCD    : (this.chipCD[lid][itemId] != null ? this.chipCD[lid][itemId] : false),
+			prevWeapon : this.weapon[lid],
 			movedEntities : [:],
 			prevBuff  : [:],
 			appliedEffects : [:], // targetId -> itemId -> true pour undo
 		};
 
 		Item item = Cache.items[itemId];
-
-		// Coût TP
-		integer weaponCost = item.cost;
-		if (item.is_weapon) {
-			// changement d'arme = +1 TP (simplifié)
-		}
-		this.tp[lid] -= weaponCost;
 
 		// Coût MP (déplacement vers cellFrom)
 		if (a.cellFrom != this.cell[lid] && a.kind != ActionGenerator.KIND_MOVE) {
@@ -153,6 +150,14 @@ class BoardState {
 				this.cellToEntity[a.cellFrom] = lid;
 			}
 		}
+
+		// Coût TP + changement d'arme
+		integer weaponCost = 0;
+		if (item.is_weapon && this.weapon[lid] != itemId) {
+			weaponCost = 1;
+			this.weapon[lid] = itemId;
+		}
+		this.tp[lid] -= item.cost + weaponCost;
 
 		// Incrémenter usedItem
 		if (this.usedItem[lid][itemId] == null) this.usedItem[lid][itemId] = 0;
@@ -187,7 +192,6 @@ class BoardState {
 			this.cellToEntity[this.cell[lid]] = -1;
 			this.cell[lid] = a.cellTo;
 			this.cellToEntity[a.cellTo] = lid;
-			this.mp[lid] -= item.cost; // coût du jump en TP déjà déduit
 		} else {
 			// Action d'attaque/buff : calcul d'impact sur la zone
 			Array<integer> areaCells = item.is_weapon
@@ -326,6 +330,9 @@ class BoardState {
 		// Restaurer TP/MP
 		this.tp[lid] = token.prevTp;
 		this.mp[lid] = token.prevMp;
+
+		// Restaurer arme équipée
+		this.weapon[lid] = token.prevWeapon;
 
 		// Restaurer usedItem
 		this.usedItem[lid][itemId] = token.prevUsed;

@@ -7,7 +7,6 @@ class ComboPlanner {
 	static BoardState s;
 	static integer leekId;
 	static integer maxDepth;
-	static integer lastWeapon;
 
 	// Recherche le meilleur plan pour leekId dans l'état s
 	static Array plan(BoardState state, integer lid) {
@@ -16,7 +15,6 @@ class ComboPlanner {
 		ComboPlanner.leekId = lid;
 		ComboPlanner.bestCombo = [];
 		ComboPlanner.bestScore = Evaluator.evaluateState(state);
-		ComboPlanner.lastWeapon = getWeapon();
 
 		// Générer les macro-actions et ne garder que les plus prometteuses
 		ComboPlanner.macros = MacroActionGenerator.generate(state, lid);
@@ -25,7 +23,7 @@ class ComboPlanner {
 			if (a.estimatedGain < b.estimatedGain) return 1;
 			return 0;
 		});
-		integer keep = count(ComboPlanner.macros) < 25 ? count(ComboPlanner.macros) : 25;
+		integer keep = count(ComboPlanner.macros) < 50 ? count(ComboPlanner.macros) : 50;
 		if (keep < count(ComboPlanner.macros)) {
 			ComboPlanner.macros = arraySlice(ComboPlanner.macros, 0, keep);
 		}
@@ -58,7 +56,7 @@ class ComboPlanner {
 			Item item = Cache.items[macro.itemId];
 
 			// Coût TP, incluant le changement d'arme
-			integer weaponCost = (item.is_weapon && ComboPlanner.lastWeapon != item.id) ? 1 : 0;
+			integer weaponCost = (item.is_weapon && ComboPlanner.s.weapon[ComboPlanner.leekId] != item.id) ? 1 : 0;
 			if (ComboPlanner.s.tp[ComboPlanner.leekId] < item.cost + weaponCost) continue;
 
 			// Cooldown simulé
@@ -75,13 +73,10 @@ class ComboPlanner {
 
 			// Appliquer et descendre
 			Object token = ComboPlanner.s.apply(macro);
-			integer prevWeapon = ComboPlanner.lastWeapon;
-			if (item.is_weapon) ComboPlanner.lastWeapon = item.id;
 			push(combo, macro);
 			ComboPlanner.search(combo, depth + 1);
 			pop(combo);
 			ComboPlanner.s.undo(token);
-			ComboPlanner.lastWeapon = prevWeapon;
 		}
 	}
 

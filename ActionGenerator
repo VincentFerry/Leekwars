@@ -29,6 +29,7 @@ class ActionGenerator {
 			Map<integer, integer> jumpCells = Carte.cellAccessJump(leek);
 			for (integer jc : integer jd in jumpCells) {
 				if (s.entityOn(jc) != -1) continue;
+				if (!isEmptyCell(jc)) continue;
 				if (!mapContainsKey(cells, jc)) cells[jc] = jd;
 			}
 		}
@@ -86,7 +87,7 @@ class ActionGenerator {
 			for (integer cellFrom : integer mpCost in cells) {
 				if (!OpBudget.canContinue(0.05)) break;
 				for (integer cellTo in cellsTarget) {
-					if (candidateCount >= 200) break;
+					if (candidateCount >= 150) break;
 					if (getCellDistance(cellFrom, cellTo) > item.maxRange) continue;
 					if (getCellDistance(cellFrom, cellTo) < item.minRange) continue;
 					if (item.needLos && !lineOfSight(cellFrom, cellTo)) continue;
@@ -103,11 +104,11 @@ class ActionGenerator {
 					push(results, a);
 					candidateCount++;
 				}
-				if (candidateCount >= 200) break;
+				if (candidateCount >= 150) break;
 			}
 		}
 
-		var limit = 800;
+		var limit = 600;
 		if (count(results) > limit) {
 			debugW('ActionGenerator.attacks : troncature ' + count(results) + ' -> ' + limit);
 			results = arraySlice(results, 0, limit);
@@ -131,8 +132,9 @@ class ActionGenerator {
 				if (jCell == simCell) continue;
 				if (getCellDistance(simCell, jCell) > Cache.items[CHIP_JUMP].maxRange) continue;
 				if (!lineOfSight(simCell, jCell)) continue;
-				// Vérification dans le BoardState simulé (cache tour 1 non fiable)
+				// Vérification double : BoardState simulé + plateau réel (cache tour 1 non fiable)
 				if (s.entityOn(jCell) != -1) continue;
+				if (!isEmptyCell(jCell)) continue;
 				Object a = {leekId: leekId, itemId: CHIP_JUMP, cellFrom: simCell, cellTo: jCell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
 				push(results, a);
 			}

@@ -56,11 +56,13 @@ class Executor {
 
 		// — Saut pur (KIND_MOVE + CHIP_JUMP) —
 		if (a.kind == ActionGenerator.KIND_MOVE && a.itemId == CHIP_JUMP) {
-			if (!isEmptyCell(a.cellTo)) {
-				debugW('Executor : jump annulé, cellule occupée ' + a.cellTo);
+			if (!isEmptyCell(a.cellTo) || getCellDistance(getCell(), a.cellTo) > Cache.items[CHIP_JUMP].maxRange || !lineOfSight(getCell(), a.cellTo)) {
 				return;
 			}
-			useChipOnCell(CHIP_JUMP, a.cellTo);
+			integer res = useChipOnCell(CHIP_JUMP, a.cellTo);
+			if (res <= 0) {
+				debugW('Executor : jump échoué ' + res + ' cellFrom=' + a.cellFrom + ' cellTo=' + a.cellTo);
+			}
 			return;
 		}
 
