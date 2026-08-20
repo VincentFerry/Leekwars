@@ -1,0 +1,82 @@
+include('Action');
+include('ActionGenerator');
+
+class MacroActionGenerator {
+	// Nombre de macro-actions conservées par item
+	static integer TOP_K = 3;
+
+	// Génère les macro-actions les plus prometteuses pour le leek dans l'état s
+	static Array generate(BoardState s, integer leekId) {
+		OpBudget.begin('MacroActionGenerator');
+
+		Array rawActions = arrayConcat(
+			ActionGenerator.attacks(s, leekId),
+			ActionGenerator.moves(s, leekId)
+		);
+
+		// Scorer chaque action brute et la transformer en macro-action
+		Array scored = [];
+		for (Object a in rawActions) {
+			if (!OpBudget.canContinue(0.05)) break;
+			real score = MacroActionGenerator.estimateScore(leekId, a);
+			Object macro = {
+				leekId     : a.leekId,
+				itemId     : a.itemId,
+				cellFrom   : a.cellFrom,
+				cellTo     : a.cellTo,
+				kind       : a.kind,
+				entityToRes: a.entityToRes,
+				estimatedGain: score
+			};
+			push(scored, macro);
+		}
+
+		// Grouper par itemId et garder les TOP_K meilleures
+		Map<integer, Array> byItem = [:];
+		for (Object macro in scored) {
+			if (!mapContainsKey(byItem, macro.itemId)) {
+				byItem[macro.itemId] = [];
+			}
+			push(byItem[macro.itemId], macro);
+		}
+
+		Array result = [];
+		for (integer itemId : Array macros in byItem) {
+			macros = arraySort(macros, function(a, b) {
+				if (a.estimatedGain > b.estimatedGain) return -1;
+				if (a.estimatedGain < b.estimatedGain) return 1;
+				return 0;
+			});
+			integer keep = count(macros) < MacroActionGenerator.TOP_K ? count(macros) : MacroActionGenerator.TOP_K;
+			for (integer i = 0; i < keep; i++) {
+				push(result, macros[i]);
+			}
+		}
+
+		OpBudget.end('MacroActionGenerator');
+		return result;
+	}
+
+	// Estimation rapide du gain d'une action brute
+	static real estimateScore(integer leekId, Object a) {
+		if (a.kind == ActionGenerator.KIND_MOVE) {
+			return MacroActionGenerator.estimateMoveScore(leekId, a);
+		}
+		Leek leek = Cache.leeks[leekId];
+		Item item = Cache.items[a.itemId];
+		Action temp = new Action(leek, item, a.cellFrom, a.cellTo);
+		return temp.priority;
+	}
+
+	// Heuristique rapide pour les actions de déplacement
+	static real estimateMoveScore(integer leekId, Object a) {
+		if (a.itemId == CHIP_JUMP) {
+			return 50.0;
+		} else if (a.itemId == CHIP_INVERSION) {
+			return 40.0;
+		} else if (a.itemId == CHIP_GRAPPLE || a.itemId == CHIP_BOXING_GLOVE) {
+			return 30.0;
+		}
+		return 0.0;
+	}
+}

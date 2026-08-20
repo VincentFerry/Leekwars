@@ -15,6 +15,7 @@ include('BoardState');
 include('Evaluator');
 include('ActionGenerator');
 include('Planner');
+include('ComboPlanner');
 include('Executor');
 
 function main() {
@@ -101,10 +102,9 @@ function main() {
 	OpBudget.begin('Pipeline');
 
 	BoardState boardState = BoardState.fromCache();
-	// L'ordre du combo est décidé par le Planner (beam search sur les séquences)
-	// et exécuté tel quel : ne PAS réordonner après coup (casserait les setups
-	// de vulnérabilité type Neutrino où l'ordre change les dégâts).
-	Array plan = Planner.plan(boardState, me);
+	// L'ordre du combo est décidé par le ComboPlanner (backtracking sur les
+	// macro-actions) et exécuté tel quel : ne PAS réordonner après coup.
+	Array plan = ComboPlanner.plan(boardState, me);
 	Executor.run(me, plan);
 
 	OpBudget.report();

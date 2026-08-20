@@ -1,0 +1,115 @@
+include('MacroActionGenerator');
+
+class ComboPlanner {
+	static Array macros;
+	static Array bestCombo;
+	static real bestScore;
+	static BoardState s;
+	static integer leekId;
+	static integer maxDepth;
+	static integer lastWeapon;
+
+	// Recherche le meilleur plan pour leekId dans l'état s
+	static Array plan(BoardState state, integer lid) {
+		OpBudget.begin('ComboPlanner');
+		ComboPlanner.s = state;
+		ComboPlanner.leekId = lid;
+		ComboPlanner.bestCombo = [];
+		ComboPlanner.bestScore = Evaluator.evaluateState(state);
+		ComboPlanner.lastWeapon = getWeapon();
+
+		// Générer les macro-actions et ne garder que les plus prometteuses
+		ComboPlanner.macros = MacroActionGenerator.generate(state, lid);
+		ComboPlanner.macros = arraySort(ComboPlanner.macros, function(a, b) {
+			if (a.estimatedGain > b.estimatedGain) return -1;
+			if (a.estimatedGain < b.estimatedGain) return 1;
+			return 0;
+		});
+		integer keep = count(ComboPlanner.macros) < 25 ? count(ComboPlanner.macros) : 25;
+		if (keep < count(ComboPlanner.macros)) {
+			ComboPlanner.macros = arraySlice(ComboPlanner.macros, 0, keep);
+		}
+
+		// Profondeur max bornée par les TP disponibles
+		real initialTp = state.tp[lid];
+		ComboPlanner.maxDepth = initialTp < 10 ? round(initialTp) : 10;
+
+		ComboPlanner.search([], 0);
+
+		OpBudget.end('ComboPlanner');
+		debug('ComboPlanner : score=' + ComboPlanner.bestScore + ', nb actions=' + count(ComboPlanner.bestCombo));
+		if (Cache.DEBUG_PLANNER) ComboPlanner.logPlan(state, ComboPlanner.bestCombo, ComboPlanner.bestScore);
+		return ComboPlanner.bestCombo;
+	}
+
+	// Backtracking récursif avec apply/undo sur le BoardState
+	static void search(Array combo, integer depth) {
+		if (!OpBudget.canContinue(0.20)) return;
+		if (depth >= ComboPlanner.maxDepth) return;
+
+		real currentScore = Evaluator.evaluateState(ComboPlanner.s);
+		if (currentScore > ComboPlanner.bestScore) {
+			ComboPlanner.bestScore = currentScore;
+			ComboPlanner.bestCombo = clone(combo);
+		}
+
+		for (Object macro in ComboPlanner.macros) {
+			if (!OpBudget.canContinue(0.20)) return;
+			Item item = Cache.items[macro.itemId];
+
+			// Coût TP, incluant le changement d'arme
+			integer weaponCost = (item.is_weapon && ComboPlanner.lastWeapon != item.id) ? 1 : 0;
+			if (ComboPlanner.s.tp[ComboPlanner.leekId] < item.cost + weaponCost) continue;
+
+			// Cooldown simulé
+			if (ComboPlanner.s.chipCD[ComboPlanner.leekId][macro.itemId] == true) continue;
+
+			// maxUse
+			integer used = mapContainsKey(ComboPlanner.s.usedItem[ComboPlanner.leekId], macro.itemId)
+				? ComboPlanner.s.usedItem[ComboPlanner.leekId][macro.itemId]
+				: 0;
+			if (used >= item.maxUse) continue;
+
+			// Position compatible : on ne peut exécuter une macro que depuis la cellule prévue
+			if (macro.cellFrom != ComboPlanner.s.cell[ComboPlanner.leekId]) continue;
+
+			// Appliquer et descendre
+			Object token = ComboPlanner.s.apply(macro);
+			integer prevWeapon = ComboPlanner.lastWeapon;
+			if (item.is_weapon) ComboPlanner.lastWeapon = item.id;
+			push(combo, macro);
+			ComboPlanner.search(combo, depth + 1);
+			pop(combo);
+			ComboPlanner.s.undo(token);
+			ComboPlanner.lastWeapon = prevWeapon;
+		}
+	}
+
+	// Affiche le plan final avec le gain marginal de chaque action
+	static void logPlan(BoardState state, Array actions, real bestScore) {
+		if (isEmpty(actions)) {
+			debug('ComboPlanner : aucune action retenue');
+			return;
+		}
+		debug('ComboPlanner plan final (score=' + bestScore + '):');
+		real prevScore = Evaluator.evaluateState(state);
+		Array tokens = [];
+		for (Object a in actions) {
+			Object token = state.apply(a);
+			push(tokens, token);
+			real newScore = Evaluator.evaluateState(state);
+			real gain = newScore - prevScore;
+			prevScore = newScore;
+			string line = '- ' + Cache.items[a.itemId].name + ' from ' + a.cellFrom + ' to ' + a.cellTo + ' | gain=' + gain;
+			if (a.entityToRes != -1) {
+				line += ' res=' + a.entityToRes;
+			}
+			debug(line);
+		}
+		Array tokensRev = clone(tokens);
+		reverse(tokensRev);
+		for (Object tok in tokensRev) {
+			state.undo(tok);
+		}
+	}
+}

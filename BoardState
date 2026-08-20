@@ -12,6 +12,8 @@ class BoardState {
 	// buffs de stats simulés : [entityId][statName] = points ajoutés ce tour
 	// statName in {strength, agility, magic, resistance, wisdom, science}
 	Map<integer, Map<string, real>> statBuff = [:];
+	// items non cumulables déjà actifs sur une cible : [targetId][itemId] = true
+	Map<integer, Map<integer, boolean>> appliedItemEffects = [:];
 	integer selfId = -1;
 	// index inverse cellule -> entityId (-1 si vide)
 	Map<integer, integer> cellToEntity = [:];
@@ -31,6 +33,13 @@ class BoardState {
 			s.usedItem[id]  = [:];
 			s.chipCD[id]    = [:];
 			s.statBuff[id]  = [:];
+			s.appliedItemEffects[id] = [:];
+			for (Array buff in leek.effects) {
+				integer itemSource = buff[5];
+				if (Action.isAlreadyBuff(id, itemSource)) {
+					s.appliedItemEffects[id][itemSource] = true;
+				}
+			}
 			for (integer itemId in arrayConcat(leek.weapons, leek.chips)) {
 				s.usedItem[id][itemId] = leek.itemMaxUse[itemId] != null ? leek.itemMaxUse[itemId] : 0;
 			}
@@ -122,6 +131,7 @@ class BoardState {
 			prevCD    : (this.chipCD[lid][itemId] != null ? this.chipCD[lid][itemId] : false),
 			movedEntities : [:],
 			prevBuff  : [:],
+			appliedEffects : [:], // targetId -> itemId -> true pour undo
 		};
 
 		Item item = Cache.items[itemId];
@@ -190,7 +200,7 @@ class BoardState {
 				Leek caster = Cache.leeks[lid];
 
 				// Puce non cumulable déjà active sur la cible : on ignore les effets non stackables
-				boolean alreadyBuff = Action.isAlreadyBuff(targetId, itemId);
+				boolean itemAlreadyActive = mapContainsKey(this.appliedItemEffects, targetId) && this.appliedItemEffects[targetId][itemId];
 
 				// Sauvegarder état avant
 				if (!mapContainsKey(token.prevLife, targetId)) {
@@ -204,10 +214,11 @@ class BoardState {
 				real bStr = this.buffOf(lid, 'strength');
 				real bAgi = this.buffOf(lid, 'agility');
 				real bSci = this.buffOf(lid, 'science');
+				boolean appliedNonStackable = false;
 				for (Array effect in item.effects) {
 					integer eff = effect[0];
 					// Effet non cumulable déjà présent sur la cible : on ne le resimule pas
-					if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0 && alreadyBuff) continue;
+					if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0 && itemAlreadyActive) continue;
 					if (eff == EFFECT_DAMAGE) {
 						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti, bStr, bAgi, this.relShield[targetId], this.absShield[targetId]);
 						this.life[targetId] -= res.dealt;
@@ -279,6 +290,13 @@ class BoardState {
 					}
 					// Les autres effets (shackle, poison, etc.) ne modifient pas
 					// les champs trackés par BoardState ; ignorés pour la simulation
+					if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0) appliedNonStackable = true;
+				}
+				if (appliedNonStackable) {
+					if (!mapContainsKey(this.appliedItemEffects, targetId)) this.appliedItemEffects[targetId] = [:];
+					if (!mapContainsKey(token.appliedEffects, targetId)) token.appliedEffects[targetId] = [:];
+					token.appliedEffects[targetId][itemId] = true;
+					this.appliedItemEffects[targetId][itemId] = true;
 				}
 			}
 		}
@@ -289,14 +307,14 @@ class BoardState {
 	// Ajoute un buff de stat en sauvegardant la valeur précédente dans le token
 	// scaleScience : true pour les buffs non-raw (multipliés par la science du lanceur)
 	void applyStatBuff(Object token, integer targetId, string stat, Array effect, boolean scaleScience, real areaMulti, Leek caster) {
-		if (this.statBuff[targetId] == null) this.statBuff[targetId] = [:];
+		if (!mapContainsKey(this.statBuff, targetId)) this.statBuff[targetId] = [:];
 		real val = effect[1] * areaMulti;
 		if (scaleScience) val *= (1.0 + caster.science / 100.0);
-		if (token.prevBuff[targetId] == null) token.prevBuff[targetId] = [:];
-		if (token.prevBuff[targetId][stat] == null) {
-			token.prevBuff[targetId][stat] = this.statBuff[targetId][stat] != null ? this.statBuff[targetId][stat] : 0.0;
+		if (!mapContainsKey(token.prevBuff, targetId)) token.prevBuff[targetId] = [:];
+		if (!mapContainsKey(token.prevBuff[targetId], stat)) {
+			token.prevBuff[targetId][stat] = mapContainsKey(this.statBuff[targetId], stat) ? this.statBuff[targetId][stat] : 0.0;
 		}
-		if (this.statBuff[targetId][stat] == null) this.statBuff[targetId][stat] = 0.0;
+		if (!mapContainsKey(this.statBuff[targetId], stat)) this.statBuff[targetId][stat] = 0.0;
 		this.statBuff[targetId][stat] += val;
 	}
 
@@ -345,6 +363,15 @@ class BoardState {
 			this.cellToEntity[this.cell[movedId]] = -1;
 			this.cell[movedId] = prevC;
 			this.cellToEntity[prevC] = movedId;
+		}
+
+		// Restaurer les effets non cumulables appliqués
+		for (integer targetId : Map<integer, boolean> effects in token.appliedEffects) {
+			for (integer appliedItemId : boolean val in effects) {
+				if (mapContainsKey(this.appliedItemEffects, targetId)) {
+					this.appliedItemEffects[targetId][appliedItemId] = false;
+				}
+			}
 		}
 	}
 }
