@@ -23,13 +23,12 @@ class OpBudget {
 	}
 
 	// Largeur de beam adaptative selon le budget restant
-	// Plage : 1 (serré) à 8 (large)
+	// Plage : 1 (serré) à 4 (large). 8 est trop coûteux en LeekScript.
 	static integer beamWidthForRemaining() {
 		real remaining = (OpBudget.LIMIT - getOperations()) / OpBudget.LIMIT;
-		if (remaining > 0.6) return 8;
-		if (remaining > 0.45) return 6;
-		if (remaining > 0.30) return 4;
-		if (remaining > 0.20) return 2;
+		if (remaining > 0.6) return 4;
+		if (remaining > 0.45) return 3;
+		if (remaining > 0.30) return 2;
 		return 1;
 	}
 

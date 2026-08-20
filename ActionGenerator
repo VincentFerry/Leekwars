@@ -86,7 +86,7 @@ class ActionGenerator {
 			for (integer cellFrom : integer mpCost in cells) {
 				if (!OpBudget.canContinue(0.05)) break;
 				for (integer cellTo in cellsTarget) {
-					if (candidateCount >= 600) break;
+					if (candidateCount >= 200) break;
 					if (getCellDistance(cellFrom, cellTo) > item.maxRange) continue;
 					if (getCellDistance(cellFrom, cellTo) < item.minRange) continue;
 					if (item.needLos && !lineOfSight(cellFrom, cellTo)) continue;
@@ -103,11 +103,11 @@ class ActionGenerator {
 					push(results, a);
 					candidateCount++;
 				}
-				if (candidateCount >= 600) break;
+				if (candidateCount >= 200) break;
 			}
 		}
 
-		var limit = 2000;
+		var limit = 800;
 		if (count(results) > limit) {
 			debugW('ActionGenerator.attacks : troncature ' + count(results) + ' -> ' + limit);
 			results = arraySlice(results, 0, limit);

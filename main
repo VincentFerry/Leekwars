@@ -107,6 +107,8 @@ function main() {
 	Array plan = Planner.plan(boardState, me);
 	Executor.run(me, plan);
 
+	OpBudget.report();
+
 	// Filet de sécurité TP restant
 	if (getTP() >= 3 && !Cache.forceNoMove && OpBudget.canContinue(0.10)) {
 		debug('additionnal actions');

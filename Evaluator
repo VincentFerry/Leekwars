@@ -92,8 +92,69 @@ class Evaluator {
 	}
 
 	// Valeur globale d'un état de plateau (plus haut = mieux pour nous)
+	// Version rapide : calcul direct sans création d'objet
 	static real evaluateState(BoardState s) {
-		return Evaluator.explainState(s).total;
+		OpBudget.begin('Evaluator.evaluateState');
+		real score = 0.0;
+		integer selfId = s.selfId;
+
+		for (Leek leek in Cache.leeks) {
+			integer id = leek.id;
+			real life     = s.life[id];
+			real relSh    = s.relShield[id];
+			real absSh    = s.absShield[id];
+			real sign     = leek.ally ? 1.0 : -1.0;
+
+			// Vie restante (pondérée par priorité ennemi)
+			real lifeScore = life;
+			if (!leek.ally && mapContainsKey(Cache.enemiesPrio, id)) {
+				lifeScore *= (Cache.enemiesPrio[id] / 3.0);
+			}
+			score += sign * lifeScore;
+
+			// Boucliers alliés : positifs = bons pour nous
+			if (leek.ally) {
+				score += relSh * ScoringConfig.W_RELATIVE_SHIELD;
+				score += absSh * ScoringConfig.W_ABSOLUTE_SHIELD;
+			} else {
+				// Boucliers ennemis : positifs = mauvais pour nous.
+				// Crédite les actions de setup (vulnérabilité) qui rendent
+				// relShield/absShield ennemis négatifs, pour que le Planner
+				// retienne l'ordre "vulnérabilité -> attaques" sans que le beam
+				// n'élague le setup avant que le combo ne paye.
+				real enemyPrio = mapContainsKey(Cache.enemiesPrio, id) ? (Cache.enemiesPrio[id] / 3.0) : 1.0;
+				score -= relSh * ScoringConfig.W_VULNERABILITY * enemyPrio;
+				score -= absSh * ScoringConfig.W_ABSOLUTE_SHIELD * enemyPrio;
+			}
+
+			// TP/MP restants (alliés uniquement)
+			if (leek.ally) {
+				score += s.tp[id] * ScoringConfig.W_TP * 0.1;
+				score += s.mp[id] * ScoringConfig.W_MP * 0.1;
+			}
+
+			// Buffs de stats simulés (alliés uniquement) : valorise les puces de boost
+			if (leek.ally && mapContainsKey(s.statBuff, id) && s.tp[id] >= 2) {
+				score += s.buffOf(id, 'strength')   * ScoringConfig.W_BUFF_STRENGTH;
+				score += s.buffOf(id, 'agility')    * ScoringConfig.W_BUFF_AGILITY;
+				score += s.buffOf(id, 'magic')      * ScoringConfig.W_BUFF_MAGIC;
+				score += s.buffOf(id, 'resistance') * ScoringConfig.W_BUFF_RESISTANCE;
+				score += s.buffOf(id, 'wisdom')     * ScoringConfig.W_BUFF_WISDOM;
+				score += s.buffOf(id, 'science')    * ScoringConfig.W_BUFF_SCIENCE;
+			}
+
+			// Kill bonus : ennemi à 0 = forte récompense
+			if (!leek.ally && life <= 0) {
+				score += 5000.0 * (mapContainsKey(Cache.enemiesPrio, id) ? Cache.enemiesPrio[id] : 1.0);
+			}
+			// Mort alliée = forte pénalité
+			if (leek.ally && life <= 0 && leek.type == ENTITY_LEEK) {
+				score -= 5000.0;
+			}
+		}
+
+		OpBudget.end('Evaluator.evaluateState');
+		return score;
 	}
 
 	// Gain marginal d'une action = evaluateState(après) - evaluateState(avant)
