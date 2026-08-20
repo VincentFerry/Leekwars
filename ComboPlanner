@@ -32,7 +32,7 @@ class ComboPlanner {
 		real initialTp = state.tp[lid];
 		ComboPlanner.maxDepth = initialTp < 10 ? round(initialTp) : 10;
 
-		ComboPlanner.search([], 0);
+		ComboPlanner.search([], 0, ComboPlanner.macros);
 
 		OpBudget.end('ComboPlanner');
 		debug('ComboPlanner : score=' + ComboPlanner.bestScore + ', nb actions=' + count(ComboPlanner.bestCombo));
@@ -41,7 +41,7 @@ class ComboPlanner {
 	}
 
 	// Backtracking récursif avec apply/undo sur le BoardState
-	static void search(Array combo, integer depth) {
+	static void search(Array combo, integer depth, Array macros) {
 		if (!OpBudget.canContinue(0.20)) return;
 		if (depth >= ComboPlanner.maxDepth) return;
 
@@ -51,7 +51,7 @@ class ComboPlanner {
 			ComboPlanner.bestCombo = clone(combo);
 		}
 
-		for (Object macro in ComboPlanner.macros) {
+		for (Object macro in macros) {
 			if (!OpBudget.canContinue(0.20)) return;
 			Item item = Cache.items[macro.itemId];
 
@@ -74,7 +74,21 @@ class ComboPlanner {
 			// Appliquer et descendre
 			Object token = ComboPlanner.s.apply(macro);
 			push(combo, macro);
-			ComboPlanner.search(combo, depth + 1);
+			// Après un saut, régénérer les macros depuis la nouvelle position
+			Array nextMacros = macros;
+			if (macro.kind == ActionGenerator.KIND_MOVE && macro.itemId == CHIP_JUMP) {
+				nextMacros = MacroActionGenerator.generate(ComboPlanner.s, ComboPlanner.leekId);
+				nextMacros = arraySort(nextMacros, function(a, b) {
+					if (a.estimatedGain > b.estimatedGain) return -1;
+					if (a.estimatedGain < b.estimatedGain) return 1;
+					return 0;
+				});
+				integer keep = count(nextMacros) < 30 ? count(nextMacros) : 30;
+				if (keep < count(nextMacros)) {
+					nextMacros = arraySlice(nextMacros, 0, keep);
+				}
+			}
+			ComboPlanner.search(combo, depth + 1, nextMacros);
 			pop(combo);
 			ComboPlanner.s.undo(token);
 		}

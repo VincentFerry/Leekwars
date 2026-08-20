@@ -14,15 +14,11 @@ class MacroActionGenerator {
 			ActionGenerator.moves(s, leekId)
 		);
 
-		integer simCell = s.cell[leekId];
-
 		// Scorer chaque action brute et la transformer en macro-action
 		Array scored = [];
 		for (Object a in rawActions) {
 			if (!OpBudget.canContinue(0.05)) break;
 			real score = MacroActionGenerator.estimateScore(s, leekId, a);
-			// Favoriser les actions jouables depuis la position actuelle
-			if (a.cellFrom == simCell) score += 1000.0;
 			Object macro = {
 				leekId     : a.leekId,
 				itemId     : a.itemId,
