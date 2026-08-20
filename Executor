@@ -56,6 +56,10 @@ class Executor {
 
 		// — Saut pur (KIND_MOVE + CHIP_JUMP) —
 		if (a.kind == ActionGenerator.KIND_MOVE && a.itemId == CHIP_JUMP) {
+			if (!isEmptyCell(a.cellTo)) {
+				debugW('Executor : jump annulé, cellule occupée ' + a.cellTo);
+				return;
+			}
 			useChipOnCell(CHIP_JUMP, a.cellTo);
 			return;
 		}

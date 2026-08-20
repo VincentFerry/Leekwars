@@ -130,6 +130,7 @@ class ActionGenerator {
 				if (jCell == simCell) continue;
 				if (getCellDistance(simCell, jCell) > Cache.items[CHIP_JUMP].maxRange) continue;
 				if (!lineOfSight(simCell, jCell)) continue;
+				if (!isEmptyCell(jCell)) continue;
 				Object a = {leekId: leekId, itemId: CHIP_JUMP, cellFrom: simCell, cellTo: jCell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
 				push(results, a);
 			}
