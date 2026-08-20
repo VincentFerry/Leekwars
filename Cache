@@ -50,6 +50,7 @@ class Cache {
 	static integer? oneCellSafeMap = null;
 	static boolean useLightSafeMap = false;
 	static boolean forceNoMove = false;
+	static boolean DEBUG_PLANNER = false;
 	static integer? potironMalefique = null;
 	static Map effectToFunction = [:];
 	static Map<integer, Array<integer>> drawCells;

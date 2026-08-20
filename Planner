@@ -102,7 +102,38 @@ class Planner {
 
 		OpBudget.end('Planner');
 		debug('Planner : score=' + bestScore + ', nb actions=' + count(bestActions));
+		if (Cache.DEBUG_PLANNER) Planner.logPlan(s, bestActions, initScore);
 		return bestActions;
+	}
+
+	// Affiche le plan final avec le gain marginal de chaque action
+	static void logPlan(BoardState s, Array actions, real initScore) {
+		if (isEmpty(actions)) {
+			debug('Planner : aucune action retenue');
+			return;
+		}
+		debug('Planner plan final (score initial=' + initScore + '):');
+		real prevScore = initScore;
+		Array tokens = [];
+		for (Object a in actions) {
+			Object token = s.apply(a);
+			push(tokens, token);
+			real newScore = Evaluator.evaluateState(s);
+			real gain = newScore - prevScore;
+			prevScore = newScore;
+			string line = '- ' + Cache.items[a.itemId].name + ' from ' + a.cellFrom + ' to ' + a.cellTo + ' | gain=' + gain;
+			if (a.entityToRes != null && a.entityToRes != -1) {
+				line += ' res=' + a.entityToRes;
+			}
+			debug(line);
+		}
+		Object finalExpl = Evaluator.explainState(s);
+		debug('Score final décomposé : total=' + finalExpl.total + ' lifeAlly=' + finalExpl.lifeAlly + ' lifeEnemy=' + finalExpl.lifeEnemy + ' shieldsAlly=' + finalExpl.shieldsAlly + ' shieldsEnemy=' + finalExpl.shieldsEnemy + ' resourcesAlly=' + finalExpl.resourcesAlly + ' buffs=' + finalExpl.buffs + ' kills=' + finalExpl.kills + ' deaths=' + finalExpl.deaths);
+		Array tokensRev = clone(tokens);
+		reverse(tokensRev);
+		for (Object tok in tokensRev) {
+			s.undo(tok);
+		}
 	}
 
 	// Passe finale gloutonne : dépense les TP restants en jouant, une par une,
@@ -126,6 +157,10 @@ class Planner {
 
 			real   bestGain = 0.0;
 			Object bestA    = null;
+			Object secondA  = null;
+			Object thirdA   = null;
+			real   secondGain = 0.0;
+			real   thirdGain  = 0.0;
 
 			for (Object a in candidates) {
 				if (!OpBudget.canContinue(0.03)) break;
@@ -143,14 +178,29 @@ class Planner {
 				real gain = Evaluator.evaluateState(s) - base;
 				s.undo(token);
 
+				// Maintenir le top 3 des candidats pour le debug
 				if (gain > bestGain) {
-					bestGain = gain;
-					bestA    = a;
+					thirdA = secondA; thirdGain = secondGain;
+					secondA = bestA; secondGain = bestGain;
+					bestA = a; bestGain = gain;
+				} else if (gain > secondGain) {
+					thirdA = secondA; thirdGain = secondGain;
+					secondA = a; secondGain = gain;
+				} else if (gain > thirdGain) {
+					thirdA = a; thirdGain = gain;
 				}
 			}
 
 			// Plus aucune action améliorante : on arrête (évite la boucle infinie)
 			if (bestA == null) break;
+
+			// Log des alternatives retenues dans le top 3
+			if (Cache.DEBUG_PLANNER) {
+				debug('Planner.greedy step ' + guard + ' top3 :');
+				debug('  1. ' + Cache.items[bestA.itemId].name + ' gain=' + bestGain + ' from ' + bestA.cellFrom + ' to ' + bestA.cellTo);
+				if (secondA != null) debug('  2. ' + Cache.items[secondA.itemId].name + ' gain=' + secondGain + ' from ' + secondA.cellFrom + ' to ' + secondA.cellTo);
+				if (thirdA != null)  debug('  3. ' + Cache.items[thirdA.itemId].name + ' gain=' + thirdGain + ' from ' + thirdA.cellFrom + ' to ' + thirdA.cellTo);
+			}
 
 			// Appliquer définitivement la meilleure action et l'ajouter au plan
 			s.apply(bestA);

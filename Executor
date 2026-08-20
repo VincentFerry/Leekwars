@@ -1,5 +1,4 @@
 class Executor {
-	// Exécute un plan (Array de BSActions ordonnées par le Sequencer)
 	// Zéro scoring, zéro génération d'actions, zéro mutation de Cache pendant l'exécution
 	static void run(integer leekId, Array plan) {
 		OpBudget.begin('Executor');
@@ -14,6 +13,10 @@ class Executor {
 	}
 
 	static void executeAction(integer leekId, Object a) {
+		if (Cache.DEBUG_PLANNER) {
+			string kindStr = (a.kind == ActionGenerator.KIND_MOVE) ? 'MOVE' : ((a.kind == ActionGenerator.KIND_BUFF) ? 'BUFF' : 'ATTACK');
+			debug('Executor : ' + kindStr + ' ' + Cache.items[a.itemId].name + ' from ' + a.cellFrom + ' to ' + a.cellTo);
+		}
 		integer myCell = getCell();
 		integer mp     = getMP();
 		integer tp     = getTP();
