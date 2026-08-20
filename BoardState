@@ -189,6 +189,9 @@ class BoardState {
 				Leek target = Cache.leeks[targetId];
 				Leek caster = Cache.leeks[lid];
 
+				// Puce non cumulable déjà active sur la cible : on ignore les effets non stackables
+				boolean alreadyBuff = Action.isAlreadyBuff(targetId, itemId);
+
 				// Sauvegarder état avant
 				if (!mapContainsKey(token.prevLife, targetId)) {
 					token.prevLife[targetId]  = this.life[targetId];
@@ -203,6 +206,8 @@ class BoardState {
 				real bSci = this.buffOf(lid, 'science');
 				for (Array effect in item.effects) {
 					integer eff = effect[0];
+					// Effet non cumulable déjà présent sur la cible : on ne le resimule pas
+					if ((effect[5] & EFFECT_MODIFIER_STACKABLE) == 0 && alreadyBuff) continue;
 					if (eff == EFFECT_DAMAGE) {
 						Object res = DamageModel.resolveDamage(effect, caster, target, areaMulti, bStr, bAgi, this.relShield[targetId], this.absShield[targetId]);
 						this.life[targetId] -= res.dealt;
