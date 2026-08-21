@@ -102,9 +102,9 @@ class ComboPlanner {
 					push(childActions, macro);
 					real score = ComboPlanner.s.evaluate();
 
-					// Après un saut, régénérer les macros depuis la nouvelle position
+					// Après un déplacement, régénérer les macros depuis la nouvelle position
 					Array childMacros = node.macros;
-					if (macro.kind == ActionGenerator.KIND_MOVE && macro.itemId == CHIP_JUMP) {
+					if (macro.kind == ActionGenerator.KIND_MOVE) {
 						childMacros = MacroActionGenerator.generate(ComboPlanner.s, ComboPlanner.leekId);
 						childMacros = arraySort(childMacros, function(a, b) {
 							if (a.estimatedGain > b.estimatedGain) return -1;
