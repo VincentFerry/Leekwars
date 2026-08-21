@@ -17,7 +17,7 @@ class ComboPlanner {
 		ComboPlanner.s = state;
 		ComboPlanner.leekId = lid;
 		ComboPlanner.bestCombo = [];
-		ComboPlanner.bestScore = state.evaluate();
+		ComboPlanner.bestScore = Evaluator.evaluateState(state);
 		ComboPlanner.nodesExplored = 0;
 		ComboPlanner.depthReached = 0;
 		ComboPlanner.beamWidthMax = 0;
@@ -100,7 +100,7 @@ class ComboPlanner {
 					Object token = ComboPlanner.s.apply(macro);
 					Array childActions = clone(node.actions);
 					push(childActions, macro);
-					real score = ComboPlanner.s.evaluate();
+					real score = Evaluator.evaluateState(ComboPlanner.s);
 
 					// Après un déplacement, régénérer les macros depuis la nouvelle position
 					Array childMacros = node.macros;

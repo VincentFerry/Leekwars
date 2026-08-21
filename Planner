@@ -7,7 +7,7 @@ class Planner {
 		OpBudget.begin('Planner');
 
 		// Noeud initial
-		real initScore = s.evaluate();
+		real initScore = Evaluator.evaluateState(s);
 		Array frontier = [
 			{actions: [], score: initScore, tp: s.tp[leekId], mp: s.mp[leekId]}
 		];
@@ -59,7 +59,7 @@ class Planner {
 					// La réutilisation est déjà bornée par usedItem/maxUse ci-dessus.
 
 					Object token = s.apply(a);
-					real newScore = s.evaluate();
+					real newScore = Evaluator.evaluateState(s);
 					s.undo(token);
 
 					if (newScore > bestScore) {
@@ -118,7 +118,7 @@ class Planner {
 		for (Object a in actions) {
 			Object token = s.apply(a);
 			push(tokens, token);
-			real newScore = s.evaluate();
+			real newScore = Evaluator.evaluateState(s);
 			real gain = newScore - prevScore;
 			prevScore = newScore;
 			string line = '- ' + Cache.items[a.itemId].name + ' from ' + a.cellFrom + ' to ' + a.cellTo + ' | gain=' + gain;
@@ -148,7 +148,7 @@ class Planner {
 		while (OpBudget.canContinue(0.03) && guard < 20) {
 			guard++;
 			integer simCell = s.cell[leekId];
-			real base = s.evaluate();
+			real base = Evaluator.evaluateState(s);
 
 			Array candidates = arrayConcat(
 				ActionGenerator.attacks(s, leekId),
@@ -175,7 +175,7 @@ class Planner {
 				if (used >= item.maxUse) continue;
 
 				Object token = s.apply(a);
-				real gain = s.evaluate() - base;
+				real gain = Evaluator.evaluateState(s) - base;
 				s.undo(token);
 
 				// Maintenir le top 3 des candidats pour le debug
