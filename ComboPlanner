@@ -111,7 +111,7 @@ class ComboPlanner {
 							if (a.estimatedGain < b.estimatedGain) return 1;
 							return 0;
 						});
-						integer keep = count(childMacros) < 30 ? count(childMacros) : 30;
+						integer keep = count(childMacros) < 20 ? count(childMacros) : 20;
 						if (keep < count(childMacros)) {
 							childMacros = arraySlice(childMacros, 0, keep);
 						}
