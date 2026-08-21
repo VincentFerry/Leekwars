@@ -140,6 +140,96 @@ class Evaluator {
 
 
 
+	// Décompose le score par grandes catégories (debug)
+
+	static Object explainState(BoardState s) {
+
+		real lifeAlly = 0.0;
+
+		real lifeEnemy = 0.0;
+
+		real shieldsAlly = 0.0;
+
+		real shieldsEnemy = 0.0;
+
+		real resourcesAlly = 0.0;
+
+		real buffs = 0.0;
+
+		integer kills = 0;
+
+		integer deaths = 0;
+
+		for (Leek leek in Cache.leeks) {
+
+			integer id = leek.id;
+
+			if (leek.ally) {
+
+				lifeAlly += s.life[id];
+
+				shieldsAlly += s.relShield[id] * ScoringConfig.W_RELATIVE_SHIELD + s.absShield[id] * ScoringConfig.W_ABSOLUTE_SHIELD;
+
+				resourcesAlly += s.tp[id] * ScoringConfig.W_TP * 0.1 + s.mp[id] * ScoringConfig.W_MP * 0.1;
+
+				if (s.life[id] <= 0 && leek.type == ENTITY_LEEK) deaths++;
+
+				if (mapContainsKey(s.statBuff, id) && s.tp[id] >= 2 && !isEmpty(Cache.enemiesTargets)) {
+
+					buffs += s.buffOf(id, 'strength')   * ScoringConfig.W_BUFF_STRENGTH;
+
+					buffs += s.buffOf(id, 'agility')    * ScoringConfig.W_BUFF_AGILITY;
+
+					buffs += s.buffOf(id, 'magic')      * ScoringConfig.W_BUFF_MAGIC;
+
+					buffs += s.buffOf(id, 'resistance') * ScoringConfig.W_BUFF_RESISTANCE;
+
+					buffs += s.buffOf(id, 'wisdom')     * ScoringConfig.W_BUFF_WISDOM;
+
+					buffs += s.buffOf(id, 'science')    * ScoringConfig.W_BUFF_SCIENCE;
+
+				}
+
+			} else {
+
+				real prio = mapContainsKey(Cache.enemiesPrio, id) ? Cache.enemiesPrio[id] / 3.0 : 1.0;
+
+				lifeEnemy += s.life[id] * prio;
+
+				shieldsEnemy -= (s.relShield[id] * ScoringConfig.W_VULNERABILITY + s.absShield[id] * ScoringConfig.W_ABSOLUTE_SHIELD) * prio;
+
+				if (s.life[id] <= 0) kills++;
+
+			}
+
+		}
+
+		return {
+
+			total: lifeAlly - lifeEnemy + shieldsAlly + shieldsEnemy + resourcesAlly + buffs + kills * 5000.0 - deaths * 5000.0,
+
+			lifeAlly: lifeAlly,
+
+			lifeEnemy: lifeEnemy,
+
+			shieldsAlly: shieldsAlly,
+
+			shieldsEnemy: shieldsEnemy,
+
+			resourcesAlly: resourcesAlly,
+
+			buffs: buffs,
+
+			kills: kills,
+
+			deaths: deaths
+
+		};
+
+	}
+
+
+
 	// Gain marginal d'une action = evaluateState(après) - evaluateState(avant)
 
 	// Passe par apply/undo pour ne pas cloner le BoardState
