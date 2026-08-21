@@ -236,12 +236,11 @@ class Evaluator {
 
 	static real marginalGain(BoardState s, Object a) {
 
-		// Temporaire : forcer l'évaluation complète pour valider le cache incrémental
-		real before = Evaluator.evaluateState(s);
+		real before = s.evaluate();
 
 		Object token = s.apply(a);
 
-		real after  = Evaluator.evaluateState(s);
+		real after  = s.evaluate();
 
 		s.undo(token);
 
