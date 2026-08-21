@@ -68,10 +68,9 @@ class BoardState {
 
 	// Vérifie que le cache incrémental est cohérent avec l'évaluation complète (debug)
 	void validateScore() {
-		if (!Cache.DEBUG_PLANNER) return;
 		real full = Evaluator.evaluateState(this);
 		if (abs(full - this.cachedScore) > 0.001) {
-			debugW('BoardState score mismatch : cached=' + this.cachedScore + ' full=' + full);
+			debugW('BoardState score mismatch : cached=' + this.cachedScore + ' full=' + full + ' diff=' + (full - this.cachedScore));
 		}
 	}
 

@@ -12,8 +12,8 @@ class ScoringConfig {
 	static real W_STRENGTH          = 0.4;
 	static real W_RESISTANCE        = 0.7;
 	static real W_MAGIC             = 0.6;
-	static real W_TP                = 120.0;
-	static real W_MP                = 60.0;
+	static real W_TP                = 60.0;
+	static real W_MP                = 30.0;
 	static real W_DAMAGE_RETURN     = 1.0;
 
 	// Poids des buffs de stats simulés (récompense pour puces de boost)
@@ -34,8 +34,8 @@ class ScoringConfig {
 	// Structure : fightType -> nom_poids -> valeur
 	static Map<integer, Map<string, real>> overrides = [
 		FIGHT_TYPE_FARMER : [
-			"W_TP" : 120.0,
-			"W_MP" : 60.0,
+			"W_TP" : 60.0,
+			"W_MP" : 30.0,
 		],
 		FIGHT_TYPE_BATTLE_ROYALE : [
 			"W_TP" : 100.0,
