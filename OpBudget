@@ -38,19 +38,19 @@ class OpBudget {
 
 	// Largeur de beam adaptative selon le budget restant
 
-	// Plage : 1 (serré) à 8 (large)
+	// Plage : 1 (serré) à 12 (large)
 
 	static integer beamWidthForRemaining() {
 
 		real remaining = (OpBudget.LIMIT - getOperations()) / OpBudget.LIMIT;
 
-		if (remaining > 0.6) return 8;
+		if (remaining > 0.6) return 12;
 
-		if (remaining > 0.45) return 6;
+		if (remaining > 0.45) return 8;
 
-		if (remaining > 0.30) return 4;
+		if (remaining > 0.30) return 5;
 
-		if (remaining > 0.20) return 2;
+		if (remaining > 0.20) return 3;
 
 		return 1;
 

@@ -29,7 +29,7 @@ class ComboPlanner {
 			if (a.estimatedGain < b.estimatedGain) return 1;
 			return 0;
 		});
-		integer keep = count(ComboPlanner.macros) < 50 ? count(ComboPlanner.macros) : 50;
+		integer keep = count(ComboPlanner.macros) < 80 ? count(ComboPlanner.macros) : 80;
 		if (keep < count(ComboPlanner.macros)) {
 			ComboPlanner.macros = arraySlice(ComboPlanner.macros, 0, keep);
 		}
