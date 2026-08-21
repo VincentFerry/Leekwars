@@ -51,7 +51,7 @@ class Planner {
 					Item item = Cache.items[a.itemId];
 					if (s.tp[leekId] < item.cost) continue;
 					if (s.chipCD[leekId][a.itemId] == true) continue;
-					integer used = s.usedItem[leekId][a.itemId] != null ? s.usedItem[leekId][a.itemId] : 0;
+					integer used = mapContainsKey(s.usedItem[leekId], a.itemId) ? s.usedItem[leekId][a.itemId] : 0;
 					if (used >= item.maxUse) continue;
 
 					// Pas d'élagage "déjà joué" : les armes (et puces sans cooldown)
@@ -171,7 +171,7 @@ class Planner {
 				Item item = Cache.items[a.itemId];
 				if (s.tp[leekId] < item.cost) continue;
 				if (s.chipCD[leekId][a.itemId] == true) continue;
-				integer used = s.usedItem[leekId][a.itemId] != null ? s.usedItem[leekId][a.itemId] : 0;
+				integer used = mapContainsKey(s.usedItem[leekId], a.itemId) ? s.usedItem[leekId][a.itemId] : 0;
 				if (used >= item.maxUse) continue;
 
 				Object token = s.apply(a);

@@ -68,7 +68,16 @@ class MacroActionGenerator {
 	// Heuristique rapide pour les actions de déplacement
 	static real estimateMoveScore(integer leekId, Object a) {
 		if (a.itemId == CHIP_JUMP) {
-			return 50.0;
+			// Sauts proches des ennemis prioritaires = meilleur score
+			real score = 50.0;
+			integer cellTo = a.cellTo;
+			for (integer enemyId in Cache.enemiesTargets) {
+				Leek enemy = Cache.leeks[enemyId];
+				if (enemy.life <= 0) continue;
+				integer dist = getCellDistance(cellTo, enemy.cell);
+				if (dist < 8) score += (8 - dist) * 10.0;
+			}
+			return score;
 		} else if (a.itemId == CHIP_INVERSION) {
 			return 40.0;
 		} else if (a.itemId == CHIP_GRAPPLE || a.itemId == CHIP_BOXING_GLOVE) {

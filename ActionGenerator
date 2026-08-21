@@ -44,7 +44,7 @@ class ActionGenerator {
 			// Vérifier cooldown simulé
 			if (s.chipCD[leekId][itemId] == true) continue;
 			// Vérifier maxUse
-			integer used = s.usedItem[leekId][itemId] != null ? s.usedItem[leekId][itemId] : 0;
+			integer used = mapContainsKey(s.usedItem[leekId], itemId) ? s.usedItem[leekId][itemId] : 0;
 			if (used >= item.maxUse) continue;
 			// Vérifier qu'on a assez de TP (arme équipée = pas de coût d'équipement)
 			integer weaponCost = (item.is_weapon && s.weapon[leekId] != itemId) ? 1 : 0;

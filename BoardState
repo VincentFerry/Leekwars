@@ -46,7 +46,7 @@ class BoardState {
 				}
 			}
 			for (integer itemId in arrayConcat(leek.weapons, leek.chips)) {
-				s.usedItem[id][itemId] = leek.itemMaxUse[itemId] != null ? leek.itemMaxUse[itemId] : 0;
+				s.usedItem[id][itemId] = mapContainsKey(leek.itemMaxUse, itemId) ? leek.itemMaxUse[itemId] : 0;
 			}
 			if (leek.chipsCooldown != null) {
 				for (integer chipId : boolean inCD in leek.chipsCooldown) {
@@ -165,8 +165,8 @@ class BoardState {
 
 	// Points de buff sur une stat (0 si aucun)
 	real buffOf(integer id, string stat) {
-		if (this.statBuff[id] == null) return 0.0;
-		if (this.statBuff[id][stat] == null) return 0.0;
+		if (!mapContainsKey(this.statBuff, id)) return 0.0;
+		if (!mapContainsKey(this.statBuff[id], stat)) return 0.0;
 		return this.statBuff[id][stat];
 	}
 
@@ -195,8 +195,8 @@ class BoardState {
 			prevAbsSh : [:],
 			prevTp    : this.tp[lid],
 			prevMp    : this.mp[lid],
-			prevUsed  : (this.usedItem[lid][itemId] != null ? this.usedItem[lid][itemId] : 0),
-			prevCD    : (this.chipCD[lid][itemId] != null ? this.chipCD[lid][itemId] : false),
+			prevUsed  : (mapContainsKey(this.usedItem[lid], itemId) ? this.usedItem[lid][itemId] : 0),
+			prevCD    : (mapContainsKey(this.chipCD[lid], itemId) ? this.chipCD[lid][itemId] : false),
 			prevWeapon : this.weapon[lid],
 			movedEntities : [:],
 			prevBuff  : [:],
@@ -227,7 +227,7 @@ class BoardState {
 		this.tp[lid] -= item.cost + weaponCost;
 
 		// Incrémenter usedItem
-		if (this.usedItem[lid][itemId] == null) this.usedItem[lid][itemId] = 0;
+		if (!mapContainsKey(this.usedItem[lid], itemId)) this.usedItem[lid][itemId] = 0;
 		this.usedItem[lid][itemId]++;
 
 		// Marquer cooldown
@@ -271,7 +271,7 @@ class BoardState {
 				Leek caster = Cache.leeks[lid];
 
 				// Puce non cumulable déjà active sur la cible : on ignore les effets non stackables
-				boolean itemAlreadyActive = mapContainsKey(this.appliedItemEffects, targetId) && this.appliedItemEffects[targetId][itemId];
+				boolean itemAlreadyActive = mapContainsKey(this.appliedItemEffects, targetId) && mapContainsKey(this.appliedItemEffects[targetId], itemId);
 
 				// Sauvegarder état avant
 				if (!mapContainsKey(token.prevLife, targetId)) {
