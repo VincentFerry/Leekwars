@@ -7,6 +7,9 @@ class ComboPlanner {
 	static BoardState s;
 	static integer leekId;
 	static integer maxDepth;
+	static integer nodesExplored;
+	static integer depthReached;
+	static integer beamWidthMax;
 
 	// Recherche le meilleur plan pour leekId dans l'état s
 	static Array plan(BoardState state, integer lid) {
@@ -14,7 +17,10 @@ class ComboPlanner {
 		ComboPlanner.s = state;
 		ComboPlanner.leekId = lid;
 		ComboPlanner.bestCombo = [];
-		ComboPlanner.bestScore = Evaluator.evaluateState(state);
+		ComboPlanner.bestScore = state.evaluate();
+		ComboPlanner.nodesExplored = 0;
+		ComboPlanner.depthReached = 0;
+		ComboPlanner.beamWidthMax = 0;
 
 		// Générer les macro-actions et ne garder que les plus prometteuses
 		ComboPlanner.macros = MacroActionGenerator.generate(state, lid);
@@ -32,65 +38,141 @@ class ComboPlanner {
 		real initialTp = state.tp[lid];
 		ComboPlanner.maxDepth = initialTp < 10 ? round(initialTp) : 10;
 
-		ComboPlanner.search([], 0, ComboPlanner.macros);
+		ComboPlanner.searchBeam();
 
 		OpBudget.end('ComboPlanner');
-		debug('ComboPlanner : score=' + ComboPlanner.bestScore + ', nb actions=' + count(ComboPlanner.bestCombo));
+		debug('ComboPlanner : score=' + ComboPlanner.bestScore + ', nb actions=' + count(ComboPlanner.bestCombo)
+			+ ', nodes=' + ComboPlanner.nodesExplored + ', depth=' + ComboPlanner.depthReached + ', beamW=' + ComboPlanner.beamWidthMax);
 		if (Cache.DEBUG_PLANNER) ComboPlanner.logPlan(state, ComboPlanner.bestCombo, ComboPlanner.bestScore);
 		return ComboPlanner.bestCombo;
 	}
 
-	// Backtracking récursif avec apply/undo sur le BoardState
-	static void search(Array combo, integer depth, Array macros) {
-		if (!OpBudget.canContinue(0.20)) return;
-		if (depth >= ComboPlanner.maxDepth) return;
+	// Vérifie qu'une macro peut être jouée dans l'état courant
+	static boolean isApplicable(Object macro) {
+		integer lid = ComboPlanner.leekId;
+		Item item = Cache.items[macro.itemId];
 
-		real currentScore = Evaluator.evaluateState(ComboPlanner.s);
-		if (currentScore > ComboPlanner.bestScore) {
-			ComboPlanner.bestScore = currentScore;
-			ComboPlanner.bestCombo = clone(combo);
-		}
+		// Coût TP, incluant le changement d'arme
+		integer weaponCost = (item.is_weapon && ComboPlanner.s.weapon[lid] != item.id) ? 1 : 0;
+		if (ComboPlanner.s.tp[lid] < item.cost + weaponCost) return false;
 
-		for (Object macro in macros) {
+		// Cooldown simulé
+		if (ComboPlanner.s.chipCD[lid][macro.itemId] == true) return false;
+
+		// maxUse
+		integer used = mapContainsKey(ComboPlanner.s.usedItem[lid], macro.itemId)
+			? ComboPlanner.s.usedItem[lid][macro.itemId]
+			: 0;
+		if (used >= item.maxUse) return false;
+
+		// Position compatible : on ne peut exécuter une macro que depuis la cellule prévue
+		if (macro.cellFrom != ComboPlanner.s.cell[lid]) return false;
+
+		return true;
+	}
+
+	// Beam search itératif : largeur adaptative au budget restant
+	static void searchBeam() {
+		Array frontier = [
+			{actions: [], score: ComboPlanner.bestScore, macros: ComboPlanner.macros}
+		];
+
+		for (integer depth = 0; depth < ComboPlanner.maxDepth; depth++) {
 			if (!OpBudget.canContinue(0.20)) return;
-			Item item = Cache.items[macro.itemId];
 
-			// Coût TP, incluant le changement d'arme
-			integer weaponCost = (item.is_weapon && ComboPlanner.s.weapon[ComboPlanner.leekId] != item.id) ? 1 : 0;
-			if (ComboPlanner.s.tp[ComboPlanner.leekId] < item.cost + weaponCost) continue;
+			integer beamW = OpBudget.beamWidthForRemaining();
+			Array next = [];
 
-			// Cooldown simulé
-			if (ComboPlanner.s.chipCD[ComboPlanner.leekId][macro.itemId] == true) continue;
+			for (Object node in frontier) {
+				if (!OpBudget.canContinue(0.20)) return;
 
-			// maxUse
-			integer used = mapContainsKey(ComboPlanner.s.usedItem[ComboPlanner.leekId], macro.itemId)
-				? ComboPlanner.s.usedItem[ComboPlanner.leekId][macro.itemId]
-				: 0;
-			if (used >= item.maxUse) continue;
+				// Appliquer le chemin du nœud pour reconstruire son état
+				Array tokens = [];
+				for (Object a in node.actions) {
+					push(tokens, ComboPlanner.s.apply(a));
+				}
 
-			// Position compatible : on ne peut exécuter une macro que depuis la cellule prévue
-			if (macro.cellFrom != ComboPlanner.s.cell[ComboPlanner.leekId]) continue;
+				// Explorer chaque macro disponible
+				for (Object macro in node.macros) {
+					if (!OpBudget.canContinue(0.20)) return;
+					if (!ComboPlanner.isApplicable(macro)) continue;
 
-			// Appliquer et descendre
-			Object token = ComboPlanner.s.apply(macro);
-			push(combo, macro);
-			// Après un saut, régénérer les macros depuis la nouvelle position
-			Array nextMacros = macros;
-			if (macro.kind == ActionGenerator.KIND_MOVE && macro.itemId == CHIP_JUMP) {
-				nextMacros = MacroActionGenerator.generate(ComboPlanner.s, ComboPlanner.leekId);
-				nextMacros = arraySort(nextMacros, function(a, b) {
-					if (a.estimatedGain > b.estimatedGain) return -1;
-					if (a.estimatedGain < b.estimatedGain) return 1;
-					return 0;
-				});
-				integer keep = count(nextMacros) < 30 ? count(nextMacros) : 30;
-				if (keep < count(nextMacros)) {
-					nextMacros = arraySlice(nextMacros, 0, keep);
+					Object token = ComboPlanner.s.apply(macro);
+					Array childActions = clone(node.actions);
+					push(childActions, macro);
+					real score = ComboPlanner.s.evaluate();
+
+					// Après un saut, régénérer les macros depuis la nouvelle position
+					Array childMacros = node.macros;
+					if (macro.kind == ActionGenerator.KIND_MOVE && macro.itemId == CHIP_JUMP) {
+						childMacros = MacroActionGenerator.generate(ComboPlanner.s, ComboPlanner.leekId);
+						childMacros = arraySort(childMacros, function(a, b) {
+							if (a.estimatedGain > b.estimatedGain) return -1;
+							if (a.estimatedGain < b.estimatedGain) return 1;
+							return 0;
+						});
+						integer keep = count(childMacros) < 30 ? count(childMacros) : 30;
+						if (keep < count(childMacros)) {
+							childMacros = arraySlice(childMacros, 0, keep);
+						}
+					}
+
+					push(next, {
+						actions: childActions,
+						score: score,
+						macros: childMacros,
+						cell: ComboPlanner.s.cell[ComboPlanner.leekId],
+						tp: ComboPlanner.s.tp[ComboPlanner.leekId],
+						mp: ComboPlanner.s.mp[ComboPlanner.leekId],
+						weapon: ComboPlanner.s.weapon[ComboPlanner.leekId]
+					});
+					ComboPlanner.nodesExplored++;
+
+					if (score > ComboPlanner.bestScore) {
+						ComboPlanner.bestScore = score;
+						ComboPlanner.bestCombo = clone(childActions);
+					}
+
+					ComboPlanner.s.undo(token);
+				}
+
+				// Annuler le chemin du nœud
+				Array tokensRev = clone(tokens);
+				reverse(tokensRev);
+				for (Object tok in tokensRev) {
+					ComboPlanner.s.undo(tok);
 				}
 			}
-			ComboPlanner.search(combo, depth + 1, nextMacros);
-			pop(combo);
-			ComboPlanner.s.undo(token);
+
+			if (isEmpty(next)) return;
+
+			// Élagage par dominance : garder le meilleur score par état (cell, tp, mp, weapon)
+			Map<integer, Object> bestByState = [:];
+			for (Object n in next) {
+				integer key = (n.cell << 18) | ((n.tp | 0) << 12) | ((n.mp | 0) << 6) | (n.weapon + 1);
+				if (mapContainsKey(bestByState, key)) {
+					Object prev = bestByState[key];
+					if (n.score > prev.score) bestByState[key] = n;
+				} else {
+					bestByState[key] = n;
+				}
+			}
+			next = [];
+			for (Object n in bestByState) {
+				push(next, n);
+			}
+
+			next = arraySort(next, function(a, b) {
+				if (a.score > b.score) return -1;
+				if (a.score < b.score) return 1;
+				return 0;
+			});
+			if (count(next) > beamW) {
+				next = arraySlice(next, 0, beamW);
+			}
+			if (beamW > ComboPlanner.beamWidthMax) ComboPlanner.beamWidthMax = beamW;
+			if (depth + 1 > ComboPlanner.depthReached) ComboPlanner.depthReached = depth + 1;
+			frontier = next;
 		}
 	}
 
@@ -101,12 +183,12 @@ class ComboPlanner {
 			return;
 		}
 		debug('ComboPlanner plan final (score=' + bestScore + '):');
-		real prevScore = Evaluator.evaluateState(state);
+		real prevScore = state.evaluate();
 		Array tokens = [];
 		for (Object a in actions) {
 			Object token = state.apply(a);
 			push(tokens, token);
-			real newScore = Evaluator.evaluateState(state);
+			real newScore = state.evaluate();
 			real gain = newScore - prevScore;
 			prevScore = newScore;
 			string line = '- ' + Cache.items[a.itemId].name + ' from ' + a.cellFrom + ' to ' + a.cellTo + ' | gain=' + gain;

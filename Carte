@@ -4,57 +4,42 @@ class Carte {
 
 	static Map<integer, integer> getCellulesAccessibles(integer cellIni, integer mp) {
 		if (mp <= 0) return [cellIni : 0];
-	   integer x ;
-	   integer y ;
-	   Map<integer, integer> res = new Map() as Map<integer, integer>;
-	   Map<integer, integer> res2 = new Map() as Map<integer, integer>;
-	   integer cpt = 0;
-	   Map<integer, integer> temp = new Map() as Map<integer, integer>;
-	   Map<integer, integer> temp2 = new Map() as Map<integer, integer>;
-	   integer|null cellToTest;
-	   res[cellIni] = 0;
-	   while(cpt!=mp){
-		   if (cpt==0) {
-				temp[cellIni]=0;
-		   } else {
-			temp = temp2;
-			temp2 = new Map() as Map<integer, integer>;
-		   }
-		for (var key : var ele in temp) {
-			x = getCellX(key);
-			y = getCellY(key);
-			cellToTest=getCellFromXY(x+1,y);
-			if(cellToTest!=null && res[cellToTest]==null){
-				if(Carte.isEmptyCell(cellToTest)){
-					res[cellToTest]=cpt+1;
-					temp2[cellToTest]=cpt+1;
+		Map<integer, integer> res = [:];
+		Map<integer, integer> frontier = [:];
+		res[cellIni] = 0;
+		frontier[cellIni] = 0;
+		integer cpt = 0;
+		while (cpt != mp) {
+			Map<integer, integer> nextFrontier = [:];
+			for (integer key : integer dist in frontier) {
+				integer x = getCellX(key);
+				integer y = getCellY(key);
+				integer? cellToTest;
+				cellToTest = getCellFromXY(x + 1, y);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && Carte.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x, y + 1);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && Carte.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x - 1, y);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && Carte.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x, y - 1);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && Carte.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
 				}
 			}
-			cellToTest=getCellFromXY(x, y+1);
-			if(cellToTest!=null && res[cellToTest]==null){
-				if(Carte.isEmptyCell(cellToTest)){
-					res[cellToTest]=cpt+1;
-					temp2[cellToTest]=cpt+1;
-				}     
-			}
-			cellToTest=getCellFromXY(x-1, y);
-			if(cellToTest!=null && res[cellToTest]==null){
-				if(Carte.isEmptyCell(cellToTest)){
-					res[cellToTest]=cpt+1;
-					temp2[cellToTest]=cpt+1;
-				}       
-			}
-			cellToTest=getCellFromXY(x, y-1);
-			if(cellToTest!=null && res[cellToTest]==null){
-				if(Carte.isEmptyCell(cellToTest)){
-					res[cellToTest]=cpt+1;
-					temp2[cellToTest]=cpt+1;
-				}     
-			}
+			frontier = nextFrontier;
+			cpt++;
 		}
-		cpt++;
-	   }		
-	   	return res;
+		return res;
 	}
 	
 	static Array<integer> getAreaTarget(integer me, integer area, string catTargets) {
@@ -472,11 +457,7 @@ class Carte {
 	// entityToIgnore to add
 	static boolean isEmptyCell(integer? cell) {
 		if (!cell) return false;
-		if (getCellContent(cell) == CELL_OBSTACLE) return false;
-		for (Leek entity in Cache.leeks) {
-			if (cell == entity.cell && entity.life > 0) return false;
-		}
-		return true;
+		return getCellContent(cell) == CELL_EMPTY;
 	}
 	
 	static integer getEntityOnCell(cell) {

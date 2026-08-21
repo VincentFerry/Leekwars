@@ -5,11 +5,11 @@ class ActionGenerator {
 	static integer KIND_MOVE   = 2;
 
 	// Items exclus du générateur principal (gérés séparément ou inutiles ici)
-	static Array<integer> EXCLUDED = [
-		WEAPON_ILLICIT_GRENADE_LAUNCHER,
-		WEAPON_UNSTABLE_DESTROYER,
-		CHIP_ADRENALINE,
-		CHIP_TELEPORTATION,
+	static Map<integer, boolean> EXCLUDED = [
+		WEAPON_ILLICIT_GRENADE_LAUNCHER : true,
+		WEAPON_UNSTABLE_DESTROYER : true,
+		CHIP_ADRENALINE : true,
+		CHIP_TELEPORTATION : true,
 	];
 
 	// Génère les candidats d'attaque/buff pour leekId dans l'état s
@@ -22,30 +22,33 @@ class ActionGenerator {
 		// Cellules accessibles depuis la position simulée
 		integer simCell = s.cell[leekId];
 		integer simMp   = round(s.mp[leekId]);
-		Map<integer, integer> cells = Carte.getCellulesAccessibles(simCell, simMp);
+		Map<integer, integer> cells = s.getCellulesAccessibles(simCell, simMp);
 
 		// Inclure cellules de saut si disponible
 		if (s.chipCD[leekId][CHIP_JUMP] != true && inArray(leek.chips, CHIP_JUMP)) {
 			Map<integer, integer> jumpCells = Carte.cellAccessJump(leek);
 			for (integer jc : integer jd in jumpCells) {
 				if (s.entityOn(jc) != -1) continue;
-				if (!isEmptyCell(jc)) continue;
+				if (!s.isEmptyCell(jc)) continue;
 				if (!mapContainsKey(cells, jc)) cells[jc] = jd;
 			}
 		}
 
 		Array<integer> items = arrayConcat(leek.weapons, leek.chips);
 		items = arrayFilter(items, function(i) {
-			return !inArray(ActionGenerator.EXCLUDED, i);
+			return !mapContainsKey(ActionGenerator.EXCLUDED, i);
 		});
 
 		for (integer itemId in items) {
+			Item item = Cache.items[itemId];
 			// Vérifier cooldown simulé
 			if (s.chipCD[leekId][itemId] == true) continue;
 			// Vérifier maxUse
-			Item item = Cache.items[itemId];
 			integer used = s.usedItem[leekId][itemId] != null ? s.usedItem[leekId][itemId] : 0;
 			if (used >= item.maxUse) continue;
+			// Vérifier qu'on a assez de TP (arme équipée = pas de coût d'équipement)
+			integer weaponCost = (item.is_weapon && s.weapon[leekId] != itemId) ? 1 : 0;
+			if (s.tp[leekId] < item.cost + weaponCost) continue;
 
 			// Résurrection : cas spécial
 			if (itemId == CHIP_RESURRECTION) {
@@ -84,22 +87,34 @@ class ActionGenerator {
 			if (isEmpty(cellsTarget)) continue;
 
 			integer candidateCount = 0;
+			boolean needLos = item.needLos;
+			integer maxRange = item.maxRange;
+			integer minRange = item.minRange;
+			integer launchType = item.launchType;
+			boolean isBoost = mapContainsKey(Cache.chipsBoost, itemId);
 			for (integer cellFrom : integer mpCost in cells) {
 				if (!OpBudget.canContinue(0.05)) break;
+				integer cellFromX = getCellX(cellFrom);
+				integer cellFromY = getCellY(cellFrom);
 				for (integer cellTo in cellsTarget) {
 					if (candidateCount >= 150) break;
-					if (getCellDistance(cellFrom, cellTo) > item.maxRange) continue;
-					if (getCellDistance(cellFrom, cellTo) < item.minRange) continue;
-					if (item.needLos && !lineOfSight(cellFrom, cellTo)) continue;
+					integer dist = getCellDistance(cellFrom, cellTo);
+					if (dist > maxRange || dist < minRange) continue;
+					if (needLos && !lineOfSight(cellFrom, cellTo)) continue;
 					if (cellTo == simCell && cellFrom != simCell) continue;
-					if (item.launchType == LAUNCH_TYPE_LINE && !isOnSameLine(cellFrom, cellTo)) continue;
-					if (item.launchType == LAUNCH_TYPE_DIAGONAL) {
-						if (abs(getCellX(cellFrom) - getCellX(cellTo)) != abs(getCellY(cellFrom) - getCellY(cellTo))) continue;
+					if (launchType == LAUNCH_TYPE_LINE && !isOnSameLine(cellFrom, cellTo)) continue;
+					if (launchType == LAUNCH_TYPE_DIAGONAL || launchType == LAUNCH_TYPE_STAR) {
+						integer cellToX = getCellX(cellTo);
+						integer cellToY = getCellY(cellTo);
+						integer dX = abs(cellFromX - cellToX);
+						integer dY = abs(cellFromY - cellToY);
+						if (launchType == LAUNCH_TYPE_DIAGONAL) {
+							if (dX != dY) continue;
+						} else if (launchType == LAUNCH_TYPE_STAR) {
+							if (dX != dY && !isOnSameLine(cellFrom, cellTo)) continue;
+						}
 					}
-					if (item.launchType == LAUNCH_TYPE_STAR) {
-						if (abs(getCellX(cellFrom) - getCellX(cellTo)) != abs(getCellY(cellFrom) - getCellY(cellTo)) && !isOnSameLine(cellFrom, cellTo)) continue;
-					}
-					integer k = mapContainsKey(Cache.chipsBoost, itemId) ? ActionGenerator.KIND_BUFF : ActionGenerator.KIND_ATTACK;
+					integer k = isBoost ? ActionGenerator.KIND_BUFF : ActionGenerator.KIND_ATTACK;
 					Object a = {leekId: leekId, itemId: itemId, cellFrom: cellFrom, cellTo: cellTo, kind: k, entityToRes: -1};
 					push(results, a);
 					candidateCount++;
@@ -127,14 +142,14 @@ class ActionGenerator {
 		integer simCell = s.cell[leekId];
 
 		// CHIP_JUMP : vers des cellules qui augmentent le nombre de cibles atteignables
-		if (inArray(leek.chips, CHIP_JUMP) && s.chipCD[leekId][CHIP_JUMP] != true && s.tp[leekId] >= Cache.items[CHIP_JUMP].cost) {
+		Item jumpItem = Cache.items[CHIP_JUMP];
+		if (inArray(leek.chips, CHIP_JUMP) && s.chipCD[leekId][CHIP_JUMP] != true && s.tp[leekId] >= jumpItem.cost) {
 			for (integer jCell in Cache.cellsToJump) {
 				if (jCell == simCell) continue;
-				if (getCellDistance(simCell, jCell) > Cache.items[CHIP_JUMP].maxRange) continue;
+				if (getCellDistance(simCell, jCell) > jumpItem.maxRange) continue;
 				if (!lineOfSight(simCell, jCell)) continue;
-				// Vérification double : BoardState simulé + plateau réel (cache tour 1 non fiable)
 				if (s.entityOn(jCell) != -1) continue;
-				if (!isEmptyCell(jCell)) continue;
+				if (!s.isEmptyCell(jCell)) continue;
 				Object a = {leekId: leekId, itemId: CHIP_JUMP, cellFrom: simCell, cellTo: jCell, kind: ActionGenerator.KIND_MOVE, entityToRes: -1};
 				push(results, a);
 			}

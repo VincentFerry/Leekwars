@@ -19,6 +19,8 @@ class BoardState {
 	integer selfId = -1;
 	// index inverse cellule -> entityId (-1 si vide)
 	Map<integer, integer> cellToEntity = [:];
+	// score courant de l'état, maintenu incrémentalement
+	real cachedScore = 0.0;
 
 	// Construit le BoardState initial depuis Cache.leeks
 	static BoardState fromCache() {
@@ -55,13 +57,75 @@ class BoardState {
 				s.cellToEntity[leek.cell] = id;
 			}
 		}
+		s.cachedScore = Evaluator.evaluateState(s);
 		return s;
+	}
+
+	// Retourne le score courant de l'état (maintenu incrémentalement)
+	real evaluate() {
+		return this.cachedScore;
+	}
+
+	// Met à jour cachedScore pour les entités dont l'ancien score est stocké dans affected
+	void updateAffectedScore(Map<integer, real> affected) {
+		for (integer id : real oldScore in affected) {
+			real newScore = Evaluator.scoreForLeek(this, Cache.leeks[id]);
+			this.cachedScore += newScore - oldScore;
+		}
 	}
 
 	// Entité sur une cellule (-1 si vide)
 	integer entityOn(integer c) {
 		if (mapContainsKey(this.cellToEntity, c)) return this.cellToEntity[c];
 		return -1;
+	}
+
+	// Cellule libre selon l'état simulé (obstacles fixes + entités simulées)
+	boolean isEmptyCell(integer? cell) {
+		if (!cell) return false;
+		if (getCellContent(cell) == CELL_OBSTACLE) return false;
+		return !mapContainsKey(this.cellToEntity, cell);
+	}
+
+	// Cellules accessibles depuis cellIni avec mp, selon l'état simulé
+	Map<integer, integer> getCellulesAccessibles(integer cellIni, integer mp) {
+		if (mp <= 0) return [cellIni : 0];
+		Map<integer, integer> res = [:];
+		Map<integer, integer> frontier = [:];
+		res[cellIni] = 0;
+		frontier[cellIni] = 0;
+		integer cpt = 0;
+		while (cpt != mp) {
+			Map<integer, integer> nextFrontier = [:];
+			for (integer key : integer dist in frontier) {
+				integer x = getCellX(key);
+				integer y = getCellY(key);
+				integer? cellToTest;
+				cellToTest = getCellFromXY(x + 1, y);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && this.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x, y + 1);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && this.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x - 1, y);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && this.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+				cellToTest = getCellFromXY(x, y - 1);
+				if (cellToTest != null && !mapContainsKey(res, cellToTest) && this.isEmptyCell(cellToTest)) {
+					res[cellToTest] = cpt + 1;
+					nextFrontier[cellToTest] = cpt + 1;
+				}
+			}
+			frontier = nextFrontier;
+			cpt++;
+		}
+		return res;
 	}
 
 	// Calcule la cellule d'arrivée d'une entité poussée/attirée le long de la
@@ -120,6 +184,7 @@ class BoardState {
 	Object apply(Object a) {
 		integer lid    = a.leekId;
 		integer itemId = a.itemId;
+		Map<integer, real> affected = [:];
 		Object token   = {
 			lid       : lid,
 			itemId    : itemId,
@@ -144,6 +209,7 @@ class BoardState {
 		if (a.cellFrom != this.cell[lid] && a.kind != ActionGenerator.KIND_MOVE) {
 			integer? pathCost = getPathLength(this.cell[lid], a.cellFrom);
 			if (pathCost) {
+				if (!mapContainsKey(affected, lid)) affected[lid] = Evaluator.scoreForLeek(this, Cache.leeks[lid]);
 				this.mp[lid] -= pathCost;
 				this.cellToEntity[this.cell[lid]] = -1;
 				this.cell[lid] = a.cellFrom;
@@ -157,6 +223,7 @@ class BoardState {
 			weaponCost = 1;
 			this.weapon[lid] = itemId;
 		}
+		if (!mapContainsKey(affected, lid)) affected[lid] = Evaluator.scoreForLeek(this, Cache.leeks[lid]);
 		this.tp[lid] -= item.cost + weaponCost;
 
 		// Incrémenter usedItem
@@ -208,6 +275,7 @@ class BoardState {
 
 				// Sauvegarder état avant
 				if (!mapContainsKey(token.prevLife, targetId)) {
+					if (!mapContainsKey(affected, targetId)) affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
 					token.prevLife[targetId]  = this.life[targetId];
 					token.prevRelSh[targetId] = this.relShield[targetId];
 					token.prevAbsSh[targetId] = this.absShield[targetId];
@@ -228,7 +296,10 @@ class BoardState {
 						this.life[targetId] -= res.dealt;
 						// vol de vie
 						if (res.steal > 0) {
-							if (!mapContainsKey(token.prevLife, lid)) token.prevLife[lid] = this.life[lid];
+							if (!mapContainsKey(token.prevLife, lid)) {
+								if (!mapContainsKey(affected, lid)) affected[lid] = Evaluator.scoreForLeek(this, Cache.leeks[lid]);
+								token.prevLife[lid] = this.life[lid];
+							}
 							this.life[lid] += res.steal;
 						}
 					} else if (eff == EFFECT_LIFE_DAMAGE) {
@@ -276,21 +347,23 @@ class BoardState {
 						this.cell[targetId] = a.cellTo;
 						this.cellToEntity[a.cellTo] = targetId;
 					} else if (eff == EFFECT_BUFF_TP || eff == EFFECT_RAW_BUFF_TP) {
+						if (!mapContainsKey(affected, targetId)) affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
 						this.tp[targetId] += effect[1];
 					} else if (eff == EFFECT_BUFF_MP || eff == EFFECT_RAW_BUFF_MP) {
+						if (!mapContainsKey(affected, targetId)) affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
 						this.mp[targetId] += effect[1];
 					} else if (eff == EFFECT_BUFF_STRENGTH || eff == EFFECT_RAW_BUFF_STRENGTH) {
-						this.applyStatBuff(token, targetId, 'strength', effect, eff == EFFECT_BUFF_STRENGTH, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'strength', effect, eff == EFFECT_BUFF_STRENGTH, areaMulti, caster);
 					} else if (eff == EFFECT_BUFF_AGILITY || eff == EFFECT_RAW_BUFF_AGILITY) {
-						this.applyStatBuff(token, targetId, 'agility', effect, eff == EFFECT_BUFF_AGILITY, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'agility', effect, eff == EFFECT_BUFF_AGILITY, areaMulti, caster);
 					} else if (eff == EFFECT_RAW_BUFF_MAGIC) {
-						this.applyStatBuff(token, targetId, 'magic', effect, false, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'magic', effect, false, areaMulti, caster);
 					} else if (eff == EFFECT_BUFF_RESISTANCE || eff == EFFECT_RAW_BUFF_RESISTANCE) {
-						this.applyStatBuff(token, targetId, 'resistance', effect, eff == EFFECT_BUFF_RESISTANCE, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'resistance', effect, eff == EFFECT_BUFF_RESISTANCE, areaMulti, caster);
 					} else if (eff == EFFECT_BUFF_WISDOM || eff == EFFECT_RAW_BUFF_WISDOM) {
-						this.applyStatBuff(token, targetId, 'wisdom', effect, eff == EFFECT_BUFF_WISDOM, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'wisdom', effect, eff == EFFECT_BUFF_WISDOM, areaMulti, caster);
 					} else if (eff == EFFECT_RAW_BUFF_SCIENCE) {
-						this.applyStatBuff(token, targetId, 'science', effect, false, areaMulti, caster);
+						this.applyStatBuff(token, affected, targetId, 'science', effect, false, areaMulti, caster);
 					}
 					// Les autres effets (shackle, poison, etc.) ne modifient pas
 					// les champs trackés par BoardState ; ignorés pour la simulation
@@ -305,16 +378,20 @@ class BoardState {
 			}
 		}
 
+		this.updateAffectedScore(affected);
 		return token;
 	}
 
 	// Ajoute un buff de stat en sauvegardant la valeur précédente dans le token
 	// scaleScience : true pour les buffs non-raw (multipliés par la science du lanceur)
-	void applyStatBuff(Object token, integer targetId, string stat, Array effect, boolean scaleScience, real areaMulti, Leek caster) {
+	void applyStatBuff(Object token, Map<integer, real> affected, integer targetId, string stat, Array effect, boolean scaleScience, real areaMulti, Leek caster) {
 		if (!mapContainsKey(this.statBuff, targetId)) this.statBuff[targetId] = [:];
 		real val = effect[1] * areaMulti;
 		if (scaleScience) val *= (1.0 + caster.science / 100.0);
-		if (!mapContainsKey(token.prevBuff, targetId)) token.prevBuff[targetId] = [:];
+		if (!mapContainsKey(token.prevBuff, targetId)) {
+			if (!mapContainsKey(affected, targetId)) affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
+			token.prevBuff[targetId] = [:];
+		}
 		if (!mapContainsKey(token.prevBuff[targetId], stat)) {
 			token.prevBuff[targetId][stat] = mapContainsKey(this.statBuff[targetId], stat) ? this.statBuff[targetId][stat] : 0.0;
 		}
@@ -326,6 +403,22 @@ class BoardState {
 	void undo(Object token) {
 		integer lid    = token.lid;
 		integer itemId = token.itemId;
+		Map<integer, real> affected = [:];
+
+		// Pré-calculer les anciens scores des entités qui vont être restaurées
+		affected[lid] = Evaluator.scoreForLeek(this, Cache.leeks[lid]);
+		for (integer targetId : real prevLife in token.prevLife) {
+			affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
+		}
+		for (integer targetId : real prevRel in token.prevRelSh) {
+			affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
+		}
+		for (integer targetId : real prevAbs in token.prevAbsSh) {
+			affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
+		}
+		for (integer targetId : Map<string, real> prevStats in token.prevBuff) {
+			affected[targetId] = Evaluator.scoreForLeek(this, Cache.leeks[targetId]);
+		}
 
 		// Restaurer TP/MP
 		this.tp[lid] = token.prevTp;
@@ -380,5 +473,7 @@ class BoardState {
 				}
 			}
 		}
+
+		this.updateAffectedScore(affected);
 	}
 }

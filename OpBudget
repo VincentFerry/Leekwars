@@ -1,47 +1,82 @@
 class OpBudget {
+
 	static integer LIMIT = getMaxOperations();
+
 	static Map<string, integer> phaseStart = [:];
+
 	static Map<string, integer> phaseCost  = [:];
-	static Map<string, integer> phaseCalls = [:];
+
+
 
 	static void begin(string phase) {
+
 		OpBudget.phaseStart[phase] = getOperations();
+
 	}
+
+
 
 	static void end(string phase) {
+
 		integer cost = getOperations() - OpBudget.phaseStart[phase];
-		// Cumul (et non écrasement) : une même phase peut être appelée N fois
-		integer prev = OpBudget.phaseCost[phase] != null ? OpBudget.phaseCost[phase] : 0;
-		OpBudget.phaseCost[phase] = prev + cost;
-		integer calls = OpBudget.phaseCalls[phase] != null ? OpBudget.phaseCalls[phase] : 0;
-		OpBudget.phaseCalls[phase] = calls + 1;
+
+		OpBudget.phaseCost[phase] = cost;
+
 	}
+
+
 
 	// reserveRatio : fraction du budget à garder (ex. 0.15 = garder 15%)
+
 	static boolean canContinue(real reserveRatio) {
+
 		return getOperations() < OpBudget.LIMIT * (1.0 - reserveRatio);
+
 	}
+
+
 
 	// Largeur de beam adaptative selon le budget restant
-	// Plage : 1 (serré) à 4 (large). 8 est trop coûteux en LeekScript.
+
+	// Plage : 1 (serré) à 8 (large)
+
 	static integer beamWidthForRemaining() {
+
 		real remaining = (OpBudget.LIMIT - getOperations()) / OpBudget.LIMIT;
-		if (remaining > 0.6) return 4;
-		if (remaining > 0.45) return 3;
-		if (remaining > 0.30) return 2;
+
+		if (remaining > 0.6) return 8;
+
+		if (remaining > 0.45) return 6;
+
+		if (remaining > 0.30) return 4;
+
+		if (remaining > 0.20) return 2;
+
 		return 1;
+
 	}
 
+
+
 	// Rapport structuré en fin de tour (1 seul appel debug)
+
 	static void report() {
+
 		string report = "=== OpBudget ===\n";
+
 		report += "Total utilisé : " + getOperations() + " / " + OpBudget.LIMIT + "\n";
+
 		for (string phase : integer cost in OpBudget.phaseCost) {
+
 			real pct = round(cost * 1000.0 / OpBudget.LIMIT) / 10.0;
-			integer calls = OpBudget.phaseCalls[phase] != null ? OpBudget.phaseCalls[phase] : 1;
-			integer avg = calls > 0 ? cost / calls : cost;
-			report += "  [" + phase + "] " + cost + " (" + pct + "%) x" + calls + " (moy " + avg + ")\n";
+
+			report += "  [" + phase + "] " + cost + " (" + pct + "%)\n";
+
 		}
+
 		debug(report);
+
 	}
+
 }
+
