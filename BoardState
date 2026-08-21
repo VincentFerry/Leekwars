@@ -66,6 +66,15 @@ class BoardState {
 		return this.cachedScore;
 	}
 
+	// Vérifie que le cache incrémental est cohérent avec l'évaluation complète (debug)
+	void validateScore() {
+		if (!Cache.DEBUG_PLANNER) return;
+		real full = Evaluator.evaluateState(this);
+		if (abs(full - this.cachedScore) > 0.001) {
+			debugW('BoardState score mismatch : cached=' + this.cachedScore + ' full=' + full);
+		}
+	}
+
 	// Met à jour cachedScore pour les entités dont l'ancien score est stocké dans affected
 	void updateAffectedScore(Map<integer, real> affected) {
 		for (integer id : real oldScore in affected) {
@@ -379,6 +388,7 @@ class BoardState {
 		}
 
 		this.updateAffectedScore(affected);
+		this.validateScore();
 		return token;
 	}
 
@@ -475,5 +485,6 @@ class BoardState {
 		}
 
 		this.updateAffectedScore(affected);
+		this.validateScore();
 	}
 }
